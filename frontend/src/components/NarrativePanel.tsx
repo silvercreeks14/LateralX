@@ -252,7 +252,9 @@ export default function NarrativePanel({
   const [verifyDone, setVerifyDone] = useState<Record<string, boolean>>({})
 
   useEffect(() => {
-    api.getTiStatus().then(setTiStatus).catch(() => {})
+    let live = true
+    api.getTiStatus().then(s => { if (live) setTiStatus(s) }).catch(() => {})
+    return () => { live = false }
   }, [])
 
   const handleVerify = useCallback(async (entity: string, isPositive: boolean) => {
@@ -266,7 +268,7 @@ export default function NarrativePanel({
   // Jump to investigation tab automatically when results arrive
   useEffect(() => {
     if (result) setActiveTab('investigation')
-  }, [result?.analyzed_event_count])
+  }, [result])
 
   // ── Loading ─────────────────────────────────────────────────────────────────
   if (loading) return <LoadingScreen />
@@ -306,8 +308,14 @@ export default function NarrativePanel({
   const confidenceCls = CONFIDENCE_STYLES[result.confidence] ?? CONFIDENCE_STYLES.low
   const mitreCount    = result.mitre_techniques?.length ?? 0
   const iocCount      = result.iocs?.length ?? 0
-  const highRiskCount = (result.ml_anomaly_scores ?? []).filter(s => s.risk_level === 'high_risk').length
-  const suspCount     = (result.ml_anomaly_scores ?? []).filter(s => s.risk_level === 'suspicious').length
+  const { highRiskCount, suspCount } = (result.ml_anomaly_scores ?? []).reduce(
+    (acc, s) => {
+      if (s.risk_level === 'high_risk') acc.highRiskCount++
+      else if (s.risk_level === 'suspicious') acc.suspCount++
+      return acc
+    },
+    { highRiskCount: 0, suspCount: 0 },
+  )
 
   const tabs: TabDef[] = [
     {

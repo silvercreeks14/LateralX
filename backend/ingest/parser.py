@@ -42,6 +42,129 @@ _HOST_FIELD_PRIORITY = [
     "devicename", "device_name",
 ]
 
+# Priority-ordered field names for user/actor resolution across log formats.
+# Covers Plaso, Timesketch, Velociraptor, Sysmon, generic SIEM exports, and
+# verbose Windows Event Log key-value pairs inside description/message text.
+_USER_FIELD_PRIORITY = [
+    # Primary structured user fields (most reliable)
+    "username", "user",
+    "account_name", "accountname", "account",
+    "subjectusername", "subject_username",
+    "sourceusername", "source_user", "sourceuser",
+    "targetusername", "target_username", "targetuser", "target_user",
+    "initiatorname", "actor",
+    # Windows security audit: "subject" is the acting account when username=SYSTEM
+    # Safe because _normalize_username rejects values containing spaces,
+    # so email "subject" lines ("Q1 Budget Review — ...") are automatically excluded.
+    "subject",
+    # Network/SIEM log formats
+    "src_user", "srcuser", "dst_user", "dstuser",
+    # Audit trail / change-management logs
+    "created_by", "modified_by", "operator", "owner",
+    # Email gateway logs (lowest priority — "sender" could be external)
+    "sender", "recipient",
+]
+
+# Values that represent "no meaningful actor" in Windows Event Logs.
+# NOTE: "system" is intentionally NOT listed here.  SYSTEM is a valid Windows
+# principal (NT AUTHORITY\SYSTEM) and its presence in security events — especially
+# audit log clearing, privilege use, or process creation — is forensically
+# significant.  Filtering it would hide real attack evidence.
+_SYSTEM_ACCOUNTS = frozenset({
+    "local service", "localservice",
+    "network service", "networkservice",
+    "anonymous logon", "anonymouslogon",
+    "nt authority", "-", "n/a", "unknown", "null", "",
+})
+
+# Description-text patterns used when no structured user field is populated.
+# Ordered from most specific (least false-positive risk) to least specific.
+_USER_DESC_PATTERNS = [
+    re.compile(r'Account\s+Name:\s*([\w][\w\-\.]{0,48})', re.IGNORECASE),
+    re.compile(r'SubjectUserName:\s*([\w][\w\-\.]{0,48})', re.IGNORECASE),
+    re.compile(r'TargetUserName:\s*([\w][\w\-\.]{0,48})', re.IGNORECASE),
+    re.compile(r'User(?:Name)?:\s*([\w][\w\-\.]{0,48})', re.IGNORECASE),
+]
+
+
+def _normalize_username(raw: str | None) -> str | None:
+    """
+    Normalise a raw username string for consistent cross-source identity.
+
+    Transformations applied (in order):
+      1. Strip whitespace
+      2. Strip domain prefix  (CORP\\jsmith  → jsmith)
+      3. Strip UPN suffix     (jsmith@corp   → jsmith)
+      4. Return None for machine accounts ($), SIDs, system/service accounts,
+         and placeholder values ('-', 'n/a', etc.)
+    """
+    if not raw:
+        return None
+    name = raw.strip()
+    # Strip domain prefix: CORP\jsmith or CORP/jsmith
+    if '\\' in name:
+        name = name.rsplit('\\', 1)[-1].strip()
+    elif '/' in name and not name.lower().startswith('http'):
+        name = name.rsplit('/', 1)[-1].strip()
+    # Strip UPN suffix: jsmith@corp.local → jsmith
+    if '@' in name:
+        name = name.split('@', 1)[0].strip()
+    if not name:
+        return None
+    # Names with spaces are descriptions/labels, not usernames
+    if ' ' in name:
+        return None
+    # Machine account (ends with $)
+    if name.endswith('$'):
+        return None
+    # Windows SID (S-1-5-…)
+    if re.match(r'^S-\d+-\d', name):
+        return None
+    # Built-in service / placeholder accounts
+    if name.lower() in _SYSTEM_ACCOUNTS:
+        return None
+    return name
+
+
+def _extract_user_from_description(description: str) -> str | None:
+    """
+    Extract an actor username from a Windows Event Log or syslog description
+    when no structured user field is available.
+
+    Uses finditer so that descriptions with multiple Account Name: entries
+    (e.g. EID 4624 with Subject + Target blocks) try every match per pattern,
+    not just the first (which is often the machine account).
+    """
+    for pattern in _USER_DESC_PATTERNS:
+        for m in pattern.finditer(description):
+            name = _normalize_username(m.group(1))
+            if name:
+                return name
+    return None
+
+
+def _resolve_user(obj: dict, description: str = "") -> str | None:
+    """
+    Resolve the acting user from a structured log dict (CSV row or JSON object).
+
+    Strategy:
+      1. Build a case-insensitive key map to handle title-case Windows fields
+         like "User", "TargetUser", "Computer" without needing exact-case matches.
+      2. Try each field in _USER_FIELD_PRIORITY through the lowercase map.
+      3. Normalise via _normalize_username (strips domain prefix, UPN, SIDs, etc.).
+      4. Fall back to description-text extraction if all structured fields yield None.
+    """
+    lower_obj = {k.lower(): v for k, v in obj.items()}
+    for field in _USER_FIELD_PRIORITY:
+        val = lower_obj.get(field)
+        if val and str(val).strip():
+            name = _normalize_username(str(val))
+            if name:
+                return name
+    if description:
+        return _extract_user_from_description(description)
+    return None
+
 
 def _normalize_hostname(raw: str | None) -> str:
     """
@@ -67,9 +190,11 @@ def _resolve_host(obj: dict) -> str:
     """
     Try each field in _HOST_FIELD_PRIORITY in order; return the first non-empty value
     normalized via _normalize_hostname. Falls back to 'UNKNOWN-HOST'.
+    Uses a case-insensitive key map to handle title-case Windows fields like "Computer".
     """
+    lower_obj = {k.lower(): v for k, v in obj.items()}
     for field in _HOST_FIELD_PRIORITY:
-        val = obj.get(field) or obj.get(field.lower()) or obj.get(field.upper())
+        val = lower_obj.get(field)
         if val and str(val).strip():
             return _normalize_hostname(str(val))
     return "UNKNOWN-HOST"
@@ -103,7 +228,7 @@ def parse_plaso_csv(content: str) -> list[ForensicEvent]:
                     timestamp=timestamp_raw,
                     event_type=row.get("timestamp_desc", "Unknown") or "Unknown",
                     source_host=_normalize_hostname(row.get("hostname")),
-                    user=row.get("username") or None,
+                    user=_resolve_user(row, message),
                     description=message[:1000],
                     raw_source=RawSource.PLASO,
                     event_id=event_id,
@@ -123,6 +248,55 @@ def parse_plaso_csv(content: str) -> list[ForensicEvent]:
     return events
 
 
+def _build_windows_description(obj: dict) -> str:
+    """
+    Build a `Key: Value` description string from Windows Event Log JSON fields
+    so that downstream regex patterns (Share Name:, Service Name:, Account Name:,
+    Source Network Address:, Object Name:) match correctly even when the event
+    lacks a free-text "message" or "description" key.
+    """
+    lower = {k.lower(): v for k, v in obj.items()}
+    parts: list[str] = []
+
+    if v := lower.get("eventname"):
+        parts.append(f"EventName: {v}")
+    if v := lower.get("process"):
+        parts.append(f"Process: {v}")
+    if v := lower.get("processname"):
+        parts.append(f"Process Name: {v}")
+    if v := lower.get("commandline"):
+        parts.append(f"CommandLine: {v}")
+    if v := lower.get("scriptblocktext"):
+        parts.append(f"ScriptBlockText: {str(v)[:300]}")
+    # User fields: include as "Account Name:" so downstream regex patterns match
+    for user_key in ("targetuser", "user", "subject", "created_by", "operator"):
+        if v := lower.get(user_key):
+            v_str = str(v)
+            if ' ' not in v_str and len(v_str) <= 64:
+                parts.append(f"Account Name: {v_str}")
+                break
+    if v := lower.get("ipaddress") or lower.get("clientaddress"):
+        parts.append(f"Source Network Address: {v}")
+    if v := lower.get("sharename"):
+        parts.append(f"Share Name: {v}")
+    if v := lower.get("objectname"):
+        parts.append(f"Object Name: {v}")
+    if v := lower.get("servicename"):
+        parts.append(f"Service Name: {v}")
+    if v := lower.get("taskname"):
+        parts.append(f"Task Name: {v}")
+    if v := lower.get("content"):
+        parts.append(f"Content: {str(v)[:200]}")
+    if v := lower.get("privilegelist"):
+        parts.append(f"Privilege List: {v}")
+    if v := lower.get("ticketencryptiontype"):
+        parts.append(f"Ticket Encryption Type: {v}")
+    if v := lower.get("accessmask"):
+        parts.append(f"Access Mask: {v}")
+
+    return " | ".join(parts)
+
+
 def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
     """
     Parse a Timesketch JSONL export (one JSON object per line).
@@ -138,7 +312,7 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
     Rows with no timestamp field receive the current UTC time.
     """
     _TS_KEYS = ("datetime", "@timestamp", "timestamp", "time", "EventTime")
-    _DESC_KEYS = ("message", "description", "EventDescription")
+    _DESC_KEYS = ("message", "Message", "description", "EventDescription")
     KNOWN_FIELDS = {
         "datetime", "@timestamp", "timestamp", "time", "EventTime",
         "timestamp_desc",
@@ -148,6 +322,11 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
         "sourceworkstationname", "source_workstation",
         "devicename", "device_name",
         "username", "user",
+        "account_name", "accountname", "account",
+        "subjectusername", "subject_username", "SubjectUserName",
+        "sourceusername", "source_user", "sourceuser",
+        "targetusername", "target_username", "TargetUserName",
+        "initiatorname", "actor",
         "message", "description", "EventDescription",
         "event_id", "EventID", "eventid",
     }
@@ -175,10 +354,7 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
             if not timestamp_raw:
                 timestamp_raw = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            source_host = _resolve_host(obj)
-            user = obj.get("username") or obj.get("user") or None
-
-            # Description resolution: first matching key wins; fallback to full row
+            # Description resolution must come first so _resolve_user can use it
             message: str = ""
             for key in _DESC_KEYS:
                 v = obj.get(key)
@@ -186,7 +362,12 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
                     message = str(v)
                     break
             if not message:
+                message = _build_windows_description(obj)
+            if not message:
                 message = json.dumps(obj)
+
+            source_host = _resolve_host(obj)
+            user = _resolve_user(obj, message)
 
             # Prefer direct event_id field; fall back to regex from message text
             raw_eid = obj.get("event_id") or obj.get("EventID") or obj.get("eventid")
@@ -241,7 +422,12 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
         "computername", "computer_name", "workstationname", "workstation_name",
         "workstation", "devicename", "device_name",
     ])
-    user_col = _find_column(headers, ["username", "user", "account", "accountname"])
+    user_col = _find_column(headers, [
+        "username", "user", "account", "accountname", "account_name",
+        "subjectusername", "subject_username",
+        "sourceusername", "source_user",
+        "targetusername", "target_username",
+    ])
     type_col = _find_column(headers, ["event_type", "type", "category"])
     eid_col = _find_column(headers, ["event_id", "eventid"])
 
@@ -264,12 +450,15 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
             else:
                 description = json.dumps(norm_row)
 
+            raw_user = norm_row.get(user_col) if user_col else None
+            user = _normalize_username(raw_user) or _extract_user_from_description(description)
+
             events.append(
                 ForensicEvent(
                     timestamp=timestamp_raw,
                     event_type=norm_row.get(type_col, "Generic") if type_col else "Generic",
                     source_host=_normalize_hostname(norm_row.get(host_col) if host_col else None),
-                    user=norm_row.get(user_col) if user_col else None,
+                    user=user,
                     description=description[:1000],
                     raw_source=RawSource.GENERIC,
                     event_id=norm_row.get(eid_col) if eid_col else None,
@@ -323,7 +512,10 @@ def parse_sysmon_csv(content: str) -> list[ForensicEvent]:
 
             host = _normalize_hostname(_get(row, "Computer", "SourceHostname", "hostname", "host"))
 
-            user = _get(row, "User", "SourceUser", "username") or None
+            user = (
+                _normalize_username(_get(row, "User", "SourceUser", "SubjectUserName", "TargetUserName", "username"))
+                or _extract_user_from_description(description)
+            )
 
             # EventID may have a trailing '.0' (float-exported) — strip it
             raw_eid = _get(row, "EventID")

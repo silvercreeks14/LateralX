@@ -261,20 +261,57 @@ def _is_lateral(e: ForensicEvent) -> bool:
 
 
 def _extract_src(e: ForensicEvent) -> str | None:
+    # EID 5140/5145 and network logon events emit the source IP under several field
+    # names depending on the Windows version and export tool:
+    #   "Source Address:", "Source Network Address:", "IpAddress:", "Client Address:"
+    # Some formatters also prefix the IP with one or two backslashes.
     m = re.search(
-        r'Source(?:\s+Network)?\s+Address:\s*([^\s\r\n\-]+)',
+        r'(?:Source(?:\s+Network)?\s+Address|IpAddress|Client\s+(?:IP\s+)?Address)'
+        r':\s*\\{0,2}(\d[\d.:a-fA-F]+)',
         e.description or '', re.IGNORECASE,
     )
-    if m and m.group(1) not in ('-', '', '::1', '127.0.0.1'):
-        return m.group(1)
+    if m:
+        ip = m.group(1).strip()
+        if ip not in ('-', '', '::1', '127.0.0.1'):
+            return ip
+    return None
+
+
+# Matches "Account Name: jsmith" in Windows Event Log descriptions.
+# Uses \w+ so it won't capture multi-word noise or domain-qualified names.
+_ACCT_NAME_RE = re.compile(r'Account\s+Name:\s*([\w][\w\-\.]{0,48})', re.IGNORECASE)
+
+_SKIP_ACCOUNTS = frozenset({
+    'system', 'local service', 'network service', 'anonymous logon',
+    '-', 'n/a', 'unknown', 'null',
+})
+
+
+def _extract_account_name(desc: str) -> str | None:
+    """
+    Extract a human Account Name from a Windows Event Log description when the
+    structured e.user field is unpopulated (common for EID 4104, 1102, etc.).
+    Skips machine accounts ($), built-in service accounts, and placeholder values.
+    """
+    for m in _ACCT_NAME_RE.finditer(desc):
+        name = m.group(1).strip()
+        if name.endswith('$'):
+            continue
+        if name.lower() in _SKIP_ACCOUNTS:
+            continue
+        return name
     return None
 
 
 def _extract_resource(desc: str) -> str | None:
-    m = re.search(
-        r'(?:Object Name|Share Name):\s*([^\r\n]+?)(?=\s*(?:Process Name:|Accesses:|Access:|$))',
-        desc, re.IGNORECASE,
-    )
+    # Try Share Name first (EID 5140/5145) — strip leading backslashes from UNC paths.
+    m = re.search(r'Share\s+Name:\s*(\\{0,3}\S+)', desc, re.IGNORECASE)
+    if m:
+        resource = m.group(1).lstrip('\\').strip()[:100]
+        if resource and resource not in ('', '-'):
+            return resource
+    # Fall back to Object Name (EID 4663).
+    m = re.search(r'Object\s+Name:\s*([^\r\n]{1,100})', desc, re.IGNORECASE)
     if m:
         resource = m.group(1).strip().rstrip('.').strip()[:100]
         if resource and resource not in ('', '-'):
@@ -308,6 +345,61 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     tend = sorted_events[-1].timestamp
     duration_minutes = (tend - t0).total_seconds() / 60
 
+    # ── Three-tier user attribution ───────────────────────────────────────────
+    #
+    # Tier 1 — Structured field: e.user from the parser (most reliable).
+    # Tier 2 — IP correlation: earlier event with same source IP already had a user.
+    # Tier 3 — Host-session propagation: most-recently-known user on same host
+    #           within INACTIVITY_TIMEOUT_SECONDS (models single-session attack chains
+    #           where only the logon event carries an explicit username).
+    #
+    # Precomputed in one forward pass so session state accumulates correctly.
+
+    _IP_RE = re.compile(
+        r'(?:Source(?:\s+Network)?\s+Address|IpAddress|Client(?:\s+(?:IP\s+)?)?Address)'
+        r':\s*\\{0,2}(\d[\d.:a-fA-F]+)',
+        re.IGNORECASE,
+    )
+    _SKIP_IPS = frozenset({'127.0.0.1', '::1', '-', '0.0.0.0', ''})
+
+    ip_to_user: dict[str, str] = {}
+    for e in sorted_events:
+        if e.user and e.description:
+            m = _IP_RE.search(e.description)
+            if m:
+                ip = m.group(1).strip()
+                if ip not in _SKIP_IPS:
+                    ip_to_user.setdefault(ip, e.user)
+
+    host_session: dict[str, tuple[str, object]] = {}
+    effective_users: list[str | None] = []
+
+    for e in sorted_events:
+        eff: str | None = e.user or None
+
+        # Tier 2 — IP correlation (also supersedes SYSTEM with a specific human account)
+        if (not eff or eff.lower() == 'system') and e.description:
+            m = _IP_RE.search(e.description)
+            if m:
+                ip = m.group(1).strip()
+                if ip not in _SKIP_IPS:
+                    corr = ip_to_user.get(ip)
+                    if corr:
+                        eff = corr
+
+        # Tier 3 — host-session propagation (only when eff is still None; SYSTEM is kept)
+        if not eff and e.source_host and e.source_host in host_session:
+            last_user, last_ts = host_session[e.source_host]
+            if (e.timestamp - last_ts).total_seconds() <= INACTIVITY_TIMEOUT_SECONDS:
+                eff = last_user
+
+        effective_users.append(eff)
+
+        # SYSTEM does not represent a persistent human session — do not use it to
+        # seed host_session, so the previous human user's window stays intact.
+        if eff and eff.lower() != 'system' and e.source_host:
+            host_session[e.source_host] = (eff, e.timestamp)
+
     # ── Session-aware attack step collection ───────────────────────────────────
     #
     # State per actor:
@@ -330,13 +422,13 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     attack_steps: list[dict] = []
     step_num = 0
 
-    for e in sorted_events:
+    for e, eff_u in zip(sorted_events, effective_users):
         cls = _classify(e)
         if cls is None:
             continue
         tid, tname, tactic = cls
 
-        actor  = _actor_key(e)
+        actor  = ((eff_u or 'unknown').lower(), e.source_host or 'unknown')
         last_t = step_actor_last.get(actor)
         gap_sec = (
             (e.timestamp - last_t).total_seconds()
@@ -360,7 +452,7 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
             'step_number':    step_num,
             'timestamp':      e.timestamp.isoformat(),
             'host':           e.source_host,
-            'user':           e.user,
+            'user':           eff_u,
             'tactic':         tactic,
             'technique_id':   tid,
             'technique_name': tname,
@@ -381,14 +473,14 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     lateral_paths:  list[dict]          = []
     seen_lateral:   set[tuple]          = set()
 
-    for e in sorted_events:
+    for e, eff_u in zip(sorted_events, effective_users):
         if not _is_lateral(e):
             continue
         src = _extract_src(e)
         if not src:
             continue
         dst  = e.source_host
-        user = e.user or 'unknown'
+        user = eff_u or 'unknown'
         actor = (user.lower(), dst)
 
         last_t  = lat_actor_last.get(actor)
@@ -439,20 +531,49 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
 
     # ── Blast radius ───────────────────────────────────────────────────────────
     compromised_hosts = sorted({e.source_host for e in sorted_events if e.source_host})
-    compromised_users = sorted({
-        e.user for e in sorted_events
-        if e.user and not (e.user or '').endswith('$')
-    })
 
+    # Collect compromised users from the structured e.user field first.
+    # Fall back to description parsing for high-signal EIDs where the username is
+    # embedded in the log text rather than a dedicated field (common for 4104, 1102).
+    _HIGH_SIG_EIDS = frozenset({'4104', '4688', '4624', '4625', '1102', '4672', '4698', '4720', '4769'})
+    user_set: set[str] = set()
+    for e, eff_u in zip(sorted_events, effective_users):
+        if eff_u and not eff_u.endswith('$'):
+            user_set.add(eff_u)
+        elif not eff_u and e.event_id in _HIGH_SIG_EIDS:
+            extracted = _extract_account_name(e.description or '')
+            if extracted and not extracted.endswith('$'):
+                user_set.add(extracted)
+    compromised_users = sorted(user_set)
+
+    # Accessed resources: EID 4769 exposes the Kerberos target service (e.g. MSSQLSvc);
+    # EID 5140/5145 expose the SMB share name; EID 4663 exposes the object path.
     accessed_resources: list[str] = []
     for e in sorted_events:
-        if e.event_id in ('4663', '5140', '5145'):
+        if e.event_id == '4769':
+            m = re.search(r'Service\s+Name:\s*([^\r\n\s][^\r\n]{0,99})', e.description or '', re.IGNORECASE)
+            if m:
+                svc = m.group(1).strip().rstrip('.')
+                if svc and svc not in ('-', '$krbtgt') and svc not in accessed_resources:
+                    accessed_resources.append(svc)
+        elif e.event_id in ('4663', '5140', '5145'):
             res = _extract_resource(e.description or '')
             if res and res not in accessed_resources:
                 accessed_resources.append(res)
 
     persistence_steps = [s for s in attack_steps if s['tactic'] == 'Persistence']
     persistence_mechanisms = list(dict.fromkeys(s['technique_name'] for s in persistence_steps))
+
+    # When no explicit persistence EID was logged, infer prior persistent access from
+    # the anti-forensic cleanup combo: audit log clearing (T1070.001) + VSS deletion (T1490).
+    # Attackers perform this cleanup *after* establishing persistence.
+    if not persistence_mechanisms:
+        evasion_tids = {s['technique_id'] for s in attack_steps if s['tactic'] == 'Defense Evasion'}
+        impact_tids  = {s['technique_id'] for s in attack_steps if s['tactic'] == 'Impact'}
+        if 'T1070.001' in evasion_tids and 'T1490' in impact_tids:
+            persistence_mechanisms.append(
+                'Inferred: audit log clearing + VSS deletion indicates prior persistent access'
+            )
 
     # ── Tactic progression ─────────────────────────────────────────────────────
     tactics_seen = dict.fromkeys(s['tactic'] for s in attack_steps)

@@ -730,7 +730,7 @@ def get_events(
 # ── Analysis ───────────────────────────────────────────────────────────────────
 
 @router.post("/analyze", response_model=RCAResult)
-def run_analysis(
+async def run_analysis(
     case_id: str | None = Query(default=None),
     upload_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
@@ -748,7 +748,7 @@ def run_analysis(
         raise HTTPException(400, "No events loaded. Upload a file first.")
     events = [_row_to_event(r) for r in rows]
     with _analysis_semaphore:
-        result = run_full_analysis(events)
+        result = await run_in_threadpool(run_full_analysis, events)
 
     # Supervised attack-type classification — always include so UI can show best-guess
     clf_result = atk_clf.classify_session(events)

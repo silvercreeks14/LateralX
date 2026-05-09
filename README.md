@@ -1,491 +1,384 @@
-# FIP — Forensic Investigation Platform
+# FIP — Forensic Intelligence Pipeline
 
-> An analyst-first forensic investigation platform specializing in Active Directory attack detection. Upload raw evidence, get structured threat intelligence back in seconds — MITRE ATT&CK mapping, AD-specialized lateral movement detection, behavioral anomalies, attack storylines, LLM-powered narratives, and court-ready reports.
-
----
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Architecture](#architecture)
-- [Feature Breakdown](#feature-breakdown)
-  - [Evidence Ingestion](#evidence-ingestion)
-  - [Authentication & Access Control](#authentication--access-control)
-  - [Analysis Pipeline](#analysis-pipeline)
-  - [AD Lateral Movement Detection (LMD)](#ad-lateral-movement-detection-lmd)
-  - [Behavioral Analytics](#behavioral-analytics)
-  - [Attack Storyline](#attack-storyline)
-  - [ML Anomaly Detection](#ml-anomaly-detection)
-  - [Attack Classification](#attack-classification)
-  - [MITRE ATT&CK Mapping](#mitre-attck-mapping)
-  - [Model Quality Benchmark](#model-quality-benchmark)
-  - [Threat Intelligence Enrichment](#threat-intelligence-enrichment)
-  - [Case Management](#case-management)
-  - [Reporting & Exports](#reporting--exports)
-  - [Analyst Tools](#analyst-tools)
-- [AD Attack Specialization](#ad-attack-specialization)
-- [Tech Stack](#tech-stack)
-- [Getting Started](#getting-started)
-- [Sample Data](#sample-data)
-- [Environment Variables](#environment-variables)
+Version 1.0.0. FastAPI backend + React frontend for digital forensics investigation. Accepts log files and PCAPs, runs a multi-stage analysis pipeline, and surfaces results through a structured investigation UI. Operates fully offline; an Ollama LLM is optional for narrative generation only.
 
 ---
 
-## Overview
+## Technical Stack
 
-FIP ingests forensic evidence files (Windows Security event logs, Sysmon telemetry, Plaso timelines, firewall flows, DNS logs, PCAP captures) and runs a multi-phase analysis pipeline — from instant deterministic scanning through LLM-generated narratives — outputting structured threat intelligence mapped to MITRE ATT&CK.
-
-The platform is specialized for **Active Directory attack detection**, covering the full AD kill chain: initial access → credential theft → lateral movement → domain dominance. All three ML models (LMD Random Forest, Isolation Forest, Attack Classifier) have been validated against OTRF/Security-Datasets ground-truth events and MITRE ATT&CK KB v14.
-
-The UI is a dark-themed single-page app organized around a fixed sidebar. Every button maps to a real backend endpoint.
+| Layer | Technology | Version |
+|---|---|---|
+| Frontend language | TypeScript | ~6.0.2 |
+| Frontend framework | React | 19.2.4 |
+| Frontend build tool | Vite | 8.0.4 |
+| Graph visualization | Cytoscape.js | 3.33.2 |
+| Chart library | D3 | 7.9.0 |
+| Styling | Tailwind CSS (utility classes) | — |
+| Backend language | Python | 3.11+ |
+| Backend framework | FastAPI | — |
+| ASGI server | Uvicorn | — |
+| ORM | SQLAlchemy | 2.x |
+| Schema validation | Pydantic | 2.x |
+| Database | SQLite (WAL mode) | — |
+| ML library | scikit-learn | — |
+| Model serialization | joblib | — |
+| Graph algorithms | NetworkX | — |
+| PCAP parsing | pyshark | — |
+| Graph export | pyvis | — |
+| Authentication | python-jose (JWT HS256), passlib (bcrypt) | — |
+| MFA | pyotp (TOTP RFC 6238) | — |
 
 ---
 
-## Architecture
+## Project Structure
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  Frontend  (React 18 + TypeScript + Vite + Tailwind CSS)      │
-│                                                              │
-│  Sidebar sections:                                           │
-│    Data Ingestion · Timeline · Attack Graph · Analyst Chat   │
-│  ─── ML Intelligence ────────────────────────────────────── │
-│    AI Analysis · Attack Storyline · LMD Analysis            │
-│    Model Quality · Model Settings                           │
-│  ─── Management ─────────────────────────────────────────── │
-│    Case Dashboard                                           │
-└─────────────────────────┬────────────────────────────────────┘
-                          │ REST (JSON)  /api/*
-┌─────────────────────────▼────────────────────────────────────┐
-│  Backend  (FastAPI + SQLAlchemy + SQLite)                     │
-│                                                              │
-│  Ingest → Parse → Normalize → Store (events table)          │
-│                                                              │
-│  Quick Scan  (/api/quick-scan)                               │
-│    MITRE mapping · IOC extraction · Severity · IF scores     │
-│    Attack classification                                     │
-│                                                              │
-│  AI Analysis  (/api/analyze)                                 │
-│    Narrative · Patient Zero · Pivot chain · Baseline diff    │
-│                                                              │
-│  LMD Analysis  (/api/lmd-analysis)        ← AD-specialized  │
-│    RF 6-class classifier · Attack graph · Feature report     │
-│                                                              │
-│  Behavioral  (/api/ml/behavioral)                            │
-│    Z-score spike · Lateral velocity · Auth burst             │
-│                                                              │
-│  Attack Storyline  (/api/ml/storyline)                       │
-│    ATT&CK steps · Lateral paths · Blast radius               │
-│                                                              │
-│  Model Benchmark  (/api/benchmark)                           │
-│    OTRF/MITRE ground-truth evaluation · Grade + gaps         │
-└──────────────────────────────────────────────────────────────┘
+FIP-main/
+├── main.py                        # FastAPI entry point; bootstraps admin account
+├── .env                           # Runtime configuration (see Environment section)
+├── forensic.db                    # SQLite database (auto-created on first run)
+│
+├── backend/
+│   ├── schema.py                  # All Pydantic models (source of truth for API contracts)
+│   ├── api/
+│   │   ├── routes.py              # All API endpoints (~40+) under /api prefix
+│   │   └── auth.py                # JWT issuance, TOTP verification, bcrypt helpers
+│   ├── db/
+│   │   └── models.py              # SQLAlchemy table definitions, FTS5 setup, WAL pragma
+│   ├── ingest/
+│   │   ├── parser.py              # CSV/JSON/JSONL parser for plaso/timesketch/velociraptor/generic
+│   │   └── pcap_parser.py         # PCAP/PCAPNG parser via pyshark
+│   ├── analysis/
+│   │   ├── normalizer.py          # Event deduplication and description normalization
+│   │   ├── mitre.py               # Keyword→MITRE ATT&CK technique mapper (31+ techniques)
+│   │   ├── graph.py               # Cytoscape.js-compatible attack graph builder
+│   │   ├── scoring.py             # Rule-based 0–100 severity scorer
+│   │   ├── ioc.py                 # Regex IOC extractor + STIX 2.1 export
+│   │   ├── threat_intel.py        # VirusTotal and AbuseIPDB enrichment
+│   │   ├── behavioral.py          # Four deterministic behavioral anomaly checks
+│   │   ├── correlation.py         # PCAP-to-logon cross-source correlator
+│   │   ├── storyline.py           # Session-based ATT&CK-mapped attack storyline
+│   │   ├── ml_anomaly.py          # Isolation Forest user anomaly scorer
+│   │   ├── lmd_model.py           # Random Forest 6-class AD attack classifier
+│   │   ├── attack_classifier.py   # Keyword-based attack-type pre-classifier
+│   │   ├── rules.py               # Sigma + Snort detection rule generator
+│   │   ├── llm.py                 # Narrative generation (Ollama) + deterministic fallback
+│   │   └── report.py              # HTML report renderer
+│   └── evaluation/
+│       ├── datasets.py            # Embedded OTRF/Security-Datasets benchmark data
+│       └── evaluator.py           # LMD, MITRE, and anomaly model quality evaluator
+│
+├── frontend/
+│   ├── src/
+│   │   ├── App.tsx                # Root component; all sidebar state and routing
+│   │   ├── api.ts                 # Typed fetch wrappers for every backend endpoint
+│   │   └── components/
+│   │       ├── UploadPanel.tsx        # File upload, source-type selection
+│   │       ├── CaseDashboard.tsx      # Case list and creation
+│   │       ├── Timeline.tsx           # Event timeline with FilterBar
+│   │       ├── FilterBar.tsx          # Per-column filter controls
+│   │       ├── GraphView.tsx          # Cytoscape.js attack graph renderer
+│   │       ├── NarrativePanel.tsx     # AI Analysis section host (tabs + controls)
+│   │       ├── AnalysisControls.tsx   # Run Analysis / Re-run / Export Report buttons
+│   │       ├── InvestigationNarrative.tsx  # RCA result fields and narrative text
+│   │       ├── IOCPanel.tsx           # IOC table with threat-intel badges
+│   │       ├── MitrePanel.tsx         # MITRE ATT&CK technique cards
+│   │       ├── BehavioralPanel.tsx    # Behavioral anomaly results
+│   │       ├── StorylinePanel.tsx     # Attack Storyline section
+│   │       ├── LMDPanel.tsx           # LMD Analysis section
+│   │       ├── LMDGraphView.tsx       # LMD pyvis graph renderer
+│   │       ├── MLEntityBehavior.tsx   # Per-entity Isolation Forest scores
+│   │       ├── ModelQualityPanel.tsx  # Model benchmark results and grades
+│   │       ├── GlobalSearch.tsx       # FTS5-backed global search overlay
+│   │       ├── NotesPanel.tsx         # Analyst notes with pin support
+│   │       ├── Login.tsx              # JWT login form
+│   │       ├── MfaModal.tsx           # TOTP challenge modal
+│   │       └── TotpSetupModal.tsx     # TOTP QR code setup for admin accounts
+│   └── package.json
+│
+├── tests/                         # pytest suite
+└── requirements.txt
 ```
 
 ---
 
-## Feature Breakdown
+## Database
 
-### Evidence Ingestion
+SQLite file at `./forensic.db`. WAL journal mode is enabled at connection time via `PRAGMA journal_mode=WAL` in `backend/db/models.py`, enabling concurrent readers during writes.
 
-| Format | Description |
-|--------|-------------|
-| **Plaso L2T CSV** | Timelines exported from `log2timeline.py` |
-| **Timesketch JSONL** | Native Timesketch export / custom JSONL with `datetime`, `hostname`, `username`, `message`, `event_id` |
-| **Generic CSV** | Any CSV with timestamp, host, user, event-type columns |
-| **PCAP / PCAPng** | Full packet captures parsed into protocol-labeled flow events |
+### Tables
 
-- **File integrity**: SHA-256 hash on every upload — warns if re-uploaded with a different hash (chain-of-custody)
-- **Upload limit**: 100 MB per file
-- **Multi-source merging**: multiple files in one Case are merged into a unified timeline with per-source color coding
-- **Noise filtering**: high-volume background events (4634/4647 logoff, 4776 NTLM, 4672 special privileges) suppressed unless a suspicious keyword is also present
-- **Hostname normalization**: strips domain suffixes (`.corp.local`, `.internal`, `.lan`), uppercases, resolves priority field order across log schemas
+| Table | Purpose |
+|---|---|
+| `uploads` | File upload records: filename, SHA-256 hash, case_id, event_count, uploader |
+| `events` | Parsed forensic events: timestamp, event_type, source_host, user, description, raw_source, event_id, extra (JSON), upload_id, case_id |
+| `baseline_events` | Snapshot of events designated as a clean baseline for delta comparison |
+| `analyses` | Stored `RCAResult` JSON blobs with timestamp, case_id, severity_score |
+| `incident_patterns` | Persisted known-bad IOC patterns (strings) used to flag uploads at ingest time |
+| `chat_messages` | Analyst chat history (stored but not exposed in the current sidebar) |
+| `audit_log` | Tamper-evident log: action, actor, target, timestamp, `payload_sha256`, `prev_hash` |
+| `users` | Credentials: username, `hashed_password` (bcrypt), role, TOTP secret, `totp_enabled` |
+| `cases` | Investigation cases: `case_id` (UUID), title, description, status (`active`/`closed`/`archived`), creator |
+| `analyst_notes` | Markdown notes attached to a case or analysis: author, content, `is_pinned` |
+| `ml_ground_truth` | Analyst-labeled verdicts (true/false positive) linked to analysis_id, used to compute ML metrics |
 
----
+### Full-Text Search (FTS5)
 
-### Authentication & Access Control
+Two FTS5 virtual tables are created alongside the main tables:
 
-- **JWT sessions** with 4-hour sliding expiry
-- **Role-based access**: `admin` vs `analyst` — admin gates ML training, synthetic baseline generation, and ground-truth verification
-- **TOTP MFA** (RFC 6238) compatible with Google Authenticator, Authy, and any standard TOTP app
-  - Enroll via QR code at **Settings → MFA Setup**
-  - MFA enforced on all privileged endpoints once enrolled
-- **Bcrypt** password hashing
+- `events_fts` — mirrors `description` from `events`; searched by `GET /api/search`
+- `notes_fts` — mirrors `content` from `analyst_notes`; searched by the same endpoint
 
----
+Both are kept in sync via SQLite triggers on INSERT/UPDATE/DELETE.
 
-### Analysis Pipeline
+### Audit Log Hash Chain
 
-#### Quick Scan (instant — no LLM)
-
-Runs deterministically in milliseconds. Suitable for triage.
-
-- **MITRE ATT&CK mapping** — 40+ technique signatures (see [MITRE ATT&CK Mapping](#mitre-attck-mapping))
-- **IOC extraction** — IPv4/IPv6, domains, MD5/SHA-1/SHA-256, suspicious filenames
-- **Severity scoring** — 0–100 composite: CRITICAL ≥ 80, HIGH ≥ 60, MEDIUM ≥ 35, LOW < 35
-- **ML anomaly scores** — Isolation Forest per-user behavioral scoring (if trained)
-- **Attack classification** — 10-category RF classifier
-
-#### Deep AI Analysis (LLM-powered)
-
-Full LLM pass over event windows. Requires a configured LLM provider (local Ollama or API key).
-
-- **Investigation narrative** — prose incident summary with inline event citations (clickable `[event_id]` badges)
-- **Patient Zero candidate** — first-compromised host/user
-- **Initial access vector** — how the attacker got in
-- **Pivot chain** — ordered lateral movement steps
-- **Anomalous event list** — most significant deviations, human-readable
-- **Baseline comparison** — statistical diff against stored clean-state baseline
-
-> **Note**: LMD AD attack detection results are intentionally separate from AI Analysis. Run **LMD Analysis** from the sidebar for AD-specific detections and attack graph.
+`AuditLogModel` stores a `payload_sha256` (SHA-256 of the JSON payload for each action) and a `prev_hash` (the `payload_sha256` of the immediately preceding log entry). This creates a forward-linked chain that allows offline tamper detection: any modification of a prior row breaks all subsequent hashes.
 
 ---
 
-### AD Lateral Movement Detection (LMD)
+## Analysis Pipeline
 
-Dedicated section in the sidebar — completely separate from AI Analysis.
+`run_full_analysis()` in `backend/analysis/llm.py` executes these stages sequentially for a given set of events:
 
-**Model**: AD-specialized Random Forest classifier  
-**Classes**: 6 attack categories + Normal  
-**Benchmark**: F1 = 98%, Grade A (validated against OTRF/Security-Datasets)
+**1. Normalization** (`normalizer.py`) — Strips verbose Windows Event Log boilerplate from descriptions. Reduces token count by 40–60%. Deduplicates low-value events within a 60-second sliding window keyed on `(host, event_id, user)`; attack-relevant Event IDs and events matching attack keywords bypass deduplication. Supported Event IDs: 4624, 4625, 4657, 4662, 4663, 4672, 4688, 4698, 4768, 4769, 5140, 5145, 7045, 1102.
 
-| Class | Attack Type | Key Indicators |
-|-------|-------------|----------------|
-| 0 | Normal | Baseline Windows AD activity |
-| 1 | Kerberoasting / AS-REP Roasting | EID 4769 RC4-HMAC, Rubeus, GetUserSPNs, UF_DONT_REQUIRE_PREAUTH |
-| 2 | DCSync / Credential Theft | EID 4662 + 1131f6aa, lsadump::dcsync, secretsdump, procdump LSASS |
-| 3 | Golden / Silver Ticket | kerberos::golden, lsadump::golden, krbtgt hash, Rubeus ptt |
-| 4 | Lateral Movement | PsExec/PSEXESVC, wmic /node:, mstsc, logon type 3/9/10, sekurlsa::pth |
-| 5 | AD Reconnaissance | SharpHound, BloodHound, ldapdomaindump, nltest, net group /domain |
+**2. MITRE ATT&CK Mapping** (`mitre.py`) — Keyword pattern matching across event descriptions. Maps to 31+ technique IDs. Returns `MitreTechnique` objects with `id`, `name`, `tactic`, and matched evidence string.
 
-**Features (18)**:
-```
-EventID  DestinationPort
-Has_Kerberoast  Has_ASREPRoast  Has_PTH  Has_DCSync
-Has_GoldenTicket  Has_SilverTicket  Has_PassTicket  Has_BloodHound
-Has_LSASS  Has_WMI_Lateral  Has_SMB_Lateral  Has_RDP  Has_NTLMRelay
-Has_DomainEnum  EID_4769  EID_4662
-```
+**3. Attack Graph** (`graph.py`) — Produces a Cytoscape.js-compatible dict. Lateral movement is flagged when a single user accesses 3+ distinct hosts within a 30-minute sliding window (`LATERAL_WINDOW_MINUTES=30`, `SUSPICIOUS_HOST_THRESHOLD=3`). For PCAP events, network flows are rendered as IP-to-IP edges; high-port non-HTTP/S destinations are flagged as C2-like. Cross-source scenario graphs link external IP → EventID 4688 → EventID 4769 within a ±10-minute temporal window (`SCENARIO_WINDOW_MINUTES=10`). Semantic event classification uses compiled regex patterns for process creation, Kerberos activity, lateral movement, authentication, impact, and defense evasion — applied when `event_id` is absent.
 
-**Output**:
-- Per-event detection list with attack class, severity, source/dest IP, matched indicators
-- Color-coded attack breakdown chart
-- Interactive Cytoscape attack graph — attacker → victim edges per technique
-- Filter by attack class
+**4. Severity Scoring** (`scoring.py`) — Rule-based 0–100 score with five components:
+- MITRE technique weights (max 40): T1490/T1486/T1485 each contribute 20 pts (ransomware/destruction), LSASS dump 15, Kerberoasting 12
+- Lateral movement presence (max 20)
+- Host blast radius (max 15)
+- Privileged account abuse (max 15)
+- High-signal keyword bonus (max 10): `certutil`, `mimikatz`, `lsass`, `vssadmin`, `psexec`, `mshta`, `-enc`, `encodedcommand`, `procdump`, `dcsync`, `sekurlsa`, `net user /add`, `schtasks /create`, `reg add`, `sc create`
 
----
+**5. IOC Extraction** (`ioc.py`) — Regex extraction from event descriptions. Seven IOC types: `ip`, `url`, `sha256`, `md5`, `file_path`, `domain`, `registry_key`. Private IP ranges (RFC 1918 + loopback + broadcast) and a hardcoded benign-domain set (Microsoft infrastructure, common CDNs, certificate authorities) are excluded. Supports STIX 2.1 bundle export.
 
-### Behavioral Analytics
+**6. Threat Intelligence Enrichment** (`threat_intel.py`) — Appends VirusTotal and AbuseIPDB reputation data to `IOC.context` strings. Capped at 4 HTTP lookups per analysis run (`_MAX_LOOKUPS=4`, `_TIMEOUT=8` seconds). Results are cached in a module-level dict for the lifetime of the server process. No-ops gracefully when API keys are absent.
 
-Four fully deterministic checks — no training data required, O(n) runtime:
+**7. Behavioral Analysis** (`behavioral.py`) — Four deterministic, training-free checks run in O(n):
+- `hourly_event_spike`: Z-score > 2.5 over per-user hourly event distribution (requires ≥ 3 distinct hours of data, `ZSCORE_THRESHOLD=2.5`, `MIN_HOURLY_POINTS=3`)
+- `lateral_velocity`: user accesses > 3 distinct hosts within a 30-minute window (`VELOCITY_WINDOW_MIN=30`, `VELOCITY_THRESHOLD=3`)
+- `auth_failure_burst`: > 10 Event ID 4625 failures from a single user within 5 minutes (`AUTH_FAIL_WINDOW_MIN=5`, `AUTH_FAIL_THRESHOLD=10`)
+- `off_hours_privilege`: Event ID 4672 (SeDebugPrivilege) occurring outside 07:00–19:00 (`WORK_HOUR_START=7`, `WORK_HOUR_END=19`)
 
-| Check | Trigger |
-|-------|---------|
-| **Hourly event spike** | Per-user event count Z-score > 2.5 (requires ≥ 3 distinct hours) |
-| **Lateral velocity** | User accesses > 3 distinct hosts within any 30-minute window |
-| **Auth failure burst** | > 10 EID 4625 failures per user within 5 minutes |
-| **Off-hours privilege** | EID 4672 (SeDebugPrivilege) outside 07:00–19:00 |
+**8. Cross-Source Correlation** (`correlation.py`) — Links PCAP network flow events with logon events using IP address matching and a ±5-minute timestamp window (`CORR_WINDOW_MIN=5`). Confidence is `HIGH` when source IP matches exactly, `MEDIUM` when driven by timestamp proximity alone. Minimum confidence threshold to include a link in results: 0.30.
 
-Each anomaly includes: `anomaly_type`, `entity`, `z_score`, `threshold`, `observed`, `severity`.
+**9. Attack Storyline** (`storyline.py`) — Session-based ATT&CK attack chain reconstruction. An actor is identified by `(user, source_host)`. A session remains open while consecutive events from that actor arrive within 60 minutes of each other (inactivity timeout). Produces: chronological `AttackStep` list, `LateralPath` list (`from_host` → `to_host` with method and technique_id), and a `BlastRadius` summary (compromised hosts, compromised users, accessed resources, persistence mechanisms). Deterministic; requires no LLM.
 
----
-
-### Attack Storyline
-
-Correlates events across all sources to reconstruct the attack as structured data — no LLM:
-
-- **ATT&CK-mapped attack steps** — `(timestamp, host, user, tactic, technique_id, confidence)`
-- **Lateral movement paths** — `from_host → to_host` with method (SMB/WMI/RDP/WinRM/PTH/PTT) and technique ID
-- **Blast radius** — compromised hosts/users, accessed resources, persistence mechanisms, estimated data at risk
-- **Threat actor profile** — heuristic characterization based on observed TTP combination
-- **Entry vector** — detected initial access method
-- **Tactic progression** — ordered ATT&CK kill-chain phases
-
-**AD attack chains fully modeled**:
-- Full Kerberoast → DCSync → Golden Ticket chain
-- AS-REP Roasting → lateral movement
-- NTLM relay + credential lateral across 3+ hosts
-- BloodHound recon → targeted Kerberoasting
-- Skeleton Key persistence
-- Golden/Silver Ticket with PTT
-
-**Supported event IDs in storyline engine**:
-`4624 · 4625 · 4648 · 4662 · 4663 · 4672 · 4688 · 4698 · 4720 · 4726 · 4728 · 4732 · 4739 · 4756 · 4768 · 4769 · 4771 · 4776 · 5140 · 7045`
-
----
-
-### ML Anomaly Detection (Isolation Forest)
-
-- **Algorithm**: scikit-learn Isolation Forest (unsupervised)
-- **Feature vector (15 features)**:
+**10. ML Anomaly Detection** (`ml_anomaly.py`) — Isolation Forest model (`models/isolation_forest.pkl`) loaded via joblib. Scores each user entity against 15 behavioral features derived from their event history:
 
 | Feature | Description |
-|---------|-------------|
-| event_rate | Events per minute |
-| unique_hosts | Distinct host count |
-| admin_tool_count | Known admin/attack tool invocations |
-| off_hours_ratio | Fraction of events outside business hours |
-| failed_logon_ratio | EID 4625 failures / total events |
-| lateral_host_count | Distinct hosts accessed in 30-min windows |
-| process_injection_count | Suspicious process-access patterns |
-| encoded_cmd_count | Base64 / -enc PowerShell invocations |
-| network_event_ratio | Network events / total events |
-| privilege_event_count | EID 4672 (SeDebugPrivilege) events |
-| **kerberos_ticket_rate** | Kerberos tickets / total — detects Kerberoasting burst |
-| **lateral_logon_ratio** | Type 3/9/10 logons / total — detects PTH/lateral |
-| **domain_recon_count** | nltest / net group / dsquery invocations |
-| **priv_escalation_count** | Privilege escalation tool indicators |
-| **ad_attack_tool_count** | Rubeus, BloodHound, impacket, CrackMapExec, etc. |
+|---|---|
+| `avg_login_hour` | Mean hour-of-day for all login events |
+| `off_hours_ratio` | Fraction of events outside 07:00–19:00 |
+| `event_velocity_per_min` | Events per minute over the observation window |
+| `activity_acceleration` | Change in event velocity between first and second half of window |
+| `unique_hosts` | Count of distinct source hosts touched |
+| `failed_login_ratio` | Ratio of Event ID 4625 to total login events |
+| `admin_tool_count` | Count of events matching admin tool keywords |
+| `encoded_cmd_count` | Count of base64/encoded command events |
+| `process_event_ratio` | Ratio of process-creation events to total |
+| `event_type_diversity` | Shannon entropy of event type distribution |
+| `kerberos_ticket_rate` | Rate of Kerberos ticket events |
+| `lateral_logon_ratio` | Ratio of network logon type events |
+| `domain_recon_count` | Count of domain enumeration events |
+| `priv_escalation_count` | Count of privilege escalation events |
+| `ad_attack_tool_count` | Count of known AD attack tool references |
 
-- **Per-entity output**: anomaly score (0–1), risk level, top contributing factors
-- **Analyst feedback loop**: TP/FP verification buttons → stored ground truth → precision/recall/F1/accuracy in ML Stats
-- **Admin controls**: Seed + Train (synthetic baseline) · Retrain (existing DB events)
-- **Minimum**: ≥ 10 users with ≥ 5 events each
+Output per entity: `anomaly_score` (float), `risk_level` (`normal` / `suspicious` / `high_risk`), `contributing_factors` (list of strings), `confidence` (`insufficient_data` / `low` / `medium` / `high`), `session_event_count`.
+
+**11. LMD Classification** (`lmd_model.py`) — Random Forest classifier (`rf_model.pkl`) for Active Directory attack detection. Six classes:
+
+| Class ID | Label |
+|---|---|
+| 0 | Normal |
+| 1 | Kerberoasting / AS-REP Roasting |
+| 2 | DCSync / Credential Theft |
+| 3 | Golden Ticket / Silver Ticket |
+| 4 | Lateral Movement |
+| 5 | AD Reconnaissance |
+
+18 input features: `EventID`, `DestinationPort`, `Has_Kerberoast`, `Has_ASREPRoast`, `Has_PTH`, `Has_DCSync`, `Has_GoldenTicket`, `Has_SilverTicket`, `Has_PassTicket`, `Has_BloodHound`, `Has_LSASS`, `Has_WMI_Lateral`, `Has_SMB_Lateral`, `Has_RDP`, `Has_NTLMRelay`, `Has_DomainEnum`, `EID_4769`, `EID_4662`. No `LabelEncoder` is used; class integers are hardcoded in the module. Output: `AttackClassification` with primary class, per-class probabilities, confidence label, top matched indicator keywords, and mapped MITRE technique IDs.
+
+**12. Detection Rule Generation** (`rules.py`) — Evidence-gated Sigma and Snort rule output. Rules are only emitted when the corresponding behavioral sequence is actually present in the ingested events (not generated from technique lists alone). Four behavioral patterns detected:
+- Brute-force followed by success (T1110)
+- Encoded command execution (T1059.001)
+- Lateral movement chain (T1021)
+- Reconnaissance followed by lateral movement (T1087 + T1021)
+
+Snort rules use SID base 9,100,000 (IANA private range). Sigma rules include ATT&CK tactic tags.
+
+**13. Narrative Generation** (`llm.py`) — When `LLM_PROVIDER=ollama`, posts a structured prompt to the configured Ollama endpoint and parses the response into `RCAResult.narrative`. On `requests.exceptions.RequestException`, `json.JSONDecodeError`, `ValueError`, or `RuntimeError`, falls back to `_build_deterministic_result()`. When `LLM_PROVIDER=none`, `_build_deterministic_result()` is called directly without attempting Ollama. The deterministic fallback derives `patient_zero_candidate`, `initial_access_vector`, `pivot_chain`, and `anomalous_events` from the graph analysis, MITRE techniques, and ML scores already computed in earlier stages. `narrative_citations` maps individual narrative sentences to their source `events.id` primary keys; the frontend renders these as clickable `[N]` badges.
+
+**14. Report Generation** (`report.py`) — Renders all `RCAResult` fields into a standalone HTML file. Triggered by `GET /api/report/deep`.
+
+The `/api/analyze` endpoint is `async def` and wraps `run_full_analysis` inside `run_in_threadpool` (Starlette) to prevent blocking the event loop during CPU-bound computation or Ollama HTTP I/O.
 
 ---
 
-### Attack Classification
+## API Endpoints
 
-10-category supervised Random Forest:
+All endpoints are prefixed with `/api`. Authentication (JWT Bearer token) is required on all endpoints except `/api/auth/login` and `/api/auth/status`.
 
-| Category | Key Signals |
-|----------|-------------|
-| **Ransomware** | VSS deletion, bcdedit, shadow copy, encryption patterns |
-| **Kerberoasting** | EID 4769, RC4 encryption, SPN enumeration |
-| **Lateral Movement** | PsExec, WMI exec, admin shares, logon type 3, EID 4648 |
-| **Credential Theft** | LSASS access, Mimikatz, DCSync (EID 4662), NTDS.dit |
-| **Data Exfiltration** | Large transfers, archive staging, DNS tunneling |
-| **C2 Communication** | Beaconing, encoded payloads, unusual outbound |
-| **Persistence** | Scheduled tasks (4698), services (7045), registry run keys |
-| **Privilege Escalation** | Token manipulation (4672), UAC bypass |
-| **Defense Evasion** | LOLBins (certutil, mshta, regsvr32, wmic), log clearing |
-| **Reconnaissance** | net user/group, LDAP queries, BloodHound |
-
-Output: primary category · confidence score · all-category scores · MITRE technique IDs · top evidence keywords.
-
----
-
-### MITRE ATT&CK Mapping
-
-**Coverage: 100% of 25 benchmark technique pairs (Grade A)**
-
-| Technique ID | Name | Tactic |
+### Auth
+| Method | Path | Description |
 |---|---|---|
-| T1105 | Ingress Tool Transfer | Command and Control |
-| T1490 | Inhibit System Recovery | Impact |
-| T1218.005 | Mshta | Defense Evasion |
-| T1047 | Windows Management Instrumentation | Execution |
-| T1059.001 | PowerShell (Encoded) | Execution |
-| T1059.003 | Windows Command Shell | Execution |
-| T1218.010 | Regsvr32 | Defense Evasion |
-| T1021.002 | SMB/Windows Admin Shares | Lateral Movement |
-| T1021.001 | Remote Desktop Protocol | Lateral Movement |
-| T1021.006 | Windows Remote Management | Lateral Movement |
-| T1078 | Valid Accounts (type-3 logon) | Lateral Movement |
-| T1048.003 | Exfiltration Over Unencrypted Protocol | Exfiltration |
-| T1558.003 | Kerberoasting | Credential Access |
-| T1558.004 | AS-REP Roasting | Credential Access |
-| T1003.006 | DCSync | Credential Access |
-| T1558.001 | Golden Ticket | Credential Access |
-| T1558.002 | Silver Ticket | Credential Access |
-| T1550.002 | Pass the Hash | Lateral Movement |
-| T1550.003 | Pass the Ticket | Lateral Movement |
-| T1207 | Rogue Domain Controller (Skeleton Key) | Defense Evasion |
-| T1069.002 | Domain Groups Discovery (BloodHound/PowerView) | Discovery |
-| T1087.002 | Domain Account Enumeration | Discovery |
-| T1557.001 | LLMNR/NBT-NS Poisoning and SMB Relay | Credential Access |
-| T1082 | System Information Discovery | Discovery |
-| T1053.005 | Scheduled Task | Persistence |
-| T1547.001 | Registry Run Keys | Persistence |
-| T1003.001 | LSASS Memory Dumping | Credential Access |
-| T1136.001 | Local Account Creation | Persistence |
-| T1543.003 | Windows Service | Persistence |
-| T1098.007 | Additional Group Membership | Persistence |
-| T1484.001 | Domain Policy Modification | Defense Evasion |
+| POST | `/auth/login` | Returns JWT token on valid credentials |
+| POST | `/auth/logout` | Invalidates session (client-side token drop) |
+| GET | `/auth/status` | Returns authentication state and role |
+| POST | `/auth/totp/verify` | Validates TOTP code during login |
+| POST | `/auth/totp/setup` | Generates TOTP secret and QR code for admin |
+| POST | `/auth/totp/enable` | Enables TOTP after QR confirmation |
+
+### Ingestion
+| Method | Path | Description |
+|---|---|---|
+| POST | `/upload` | Accepts multipart file; returns `UploadResponse` with event count, time range, SHA-256, known-IOC matches |
+| POST | `/upload/baseline` | Ingest baseline snapshot for delta comparison |
+| GET | `/uploads` | List all uploads, optionally filtered by case_id |
+| DELETE | `/uploads/{upload_id}` | Delete upload and its associated events |
+| GET | `/events` | Paginated event list with optional filters |
+| GET | `/events/summary` | Host/user/event-type counts and time range |
+| DELETE | `/events` | Truncate all events |
+
+### Analysis
+| Method | Path | Description |
+|---|---|---|
+| POST | `/analyze` | Run full analysis pipeline; returns `RCAResult` |
+| POST | `/analyze/baseline` | Compare current events against baseline snapshot; returns `BaselineComparisonResult` |
+| GET | `/analyses` | List stored analyses |
+| GET | `/analyses/{id}` | Retrieve stored `RCAResult` |
+| DELETE | `/analyses/{id}` | Delete stored analysis |
+| GET | `/storyline` | Run `build_storyline()` and return `AttackStoryline` |
+| GET | `/behavioral` | Run four behavioral checks and return `BehavioralReport` |
+| POST | `/lmd-analysis` | Run LMD classifier on current events; returns `AttackClassification` + pyvis graph |
+| GET | `/ml-anomaly` | Run Isolation Forest scorer; returns list of `UserAnomalyScore` |
+| GET | `/attack-graph` | Return Cytoscape.js-compatible graph dict |
+| GET | `/report/deep` | Generate and return HTML report |
+
+### Cases & Notes
+| Method | Path | Description |
+|---|---|---|
+| POST | `/cases` | Create case; returns `Case` with generated UUID |
+| GET | `/cases` | List all cases |
+| GET | `/cases/{case_id}` | Get single case |
+| PATCH | `/cases/{case_id}` | Update title, description, or status |
+| DELETE | `/cases/{case_id}` | Delete case |
+| POST | `/notes` | Create analyst note linked to `case_id` or `analysis_id` |
+| GET | `/notes` | List notes, filtered by `case_id` or `analysis_id` |
+| PATCH | `/notes/{id}` | Update note content or pin state |
+| DELETE | `/notes/{id}` | Delete note |
+
+### Model Quality & Settings
+| Method | Path | Description |
+|---|---|---|
+| GET | `/benchmark` | Run evaluator on all three models; returns `BenchmarkReport` |
+| GET | `/ml/ground-truth` | List analyst-submitted ground-truth labels |
+| POST | `/ml/ground-truth` | Submit analyst verdict (true/false positive) for an analysis |
+| GET | `/ml/stats` | Compute precision/recall/F1/accuracy from submitted labels |
+
+### Search & Threat Intelligence
+| Method | Path | Description |
+|---|---|---|
+| GET | `/search` | FTS5 full-text search across events and notes; returns `SearchResponse` |
+| GET | `/ti/status` | Returns which TI providers are configured (`vt_configured`, `abuseipdb_configured`) |
+
+### Audit & Admin
+| Method | Path | Description |
+|---|---|---|
+| GET | `/audit-log` | Retrieve audit log entries |
+| GET | `/users` | List users (admin role required) |
+| POST | `/users` | Create user (admin role required) |
+| DELETE | `/users/{username}` | Delete user (admin role required) |
 
 ---
 
-### Model Quality Benchmark
+## UI Sections
 
-**Sidebar: ML Intelligence → Model Quality**
+The sidebar is organized into four labeled groups. Section names below are the exact labels rendered in the UI.
 
-Evaluates all three detection models against an embedded ground-truth benchmark at any time.
+**Evidence & Cases**
+- **Data Ingestion** — Upload forensic files (`UploadPanel.tsx`). Selects source type (`plaso`, `timesketch`, `velociraptor`, `generic`, `pcap`). Lists upload history with event counts. Supports baseline snapshot ingestion and truncating all events.
+- **Cases** — Create and manage investigation cases (`CaseDashboard.tsx`). Cases have status `active`, `closed`, or `archived`. Events and analyses can be scoped to a case_id.
 
-**Benchmark sources**:
-- **OTRF/Security-Datasets** (github.com/OTRF/Security-Datasets) — real Windows telemetry from controlled AD lab environments. Sub-datasets used: shire_empire_kerberoast, shire_empire_dcsync, shire_empire_sharphound, shire_empire_golden_ticket, shire_empire_procdump, shire_empire_pth, shire_empire_psexec, shire_empire_wmiexec, shire_empire_net_domain.
-- **MITRE ATT&CK KB v14** (attack.mitre.org) — 25 technique description test pairs.
+**Investigation**
+- **Timeline** — Paginated event table (`Timeline.tsx` + `FilterBar.tsx`). Filters by host, user, event type, and keyword. Events are raw records from the `events` table.
+- **Attack Graph** — Cytoscape.js force-directed graph (`GraphView.tsx`). Nodes are hosts and users; edges represent authenticated sessions and lateral movement paths. Lateral movement edges are flagged when a user accesses ≥ 3 hosts in 30 minutes.
 
-**Current benchmark results**:
+**Analysis**
+- **AI Analysis** — Primary analysis section (`NarrativePanel.tsx`, `AnalysisControls.tsx`, `InvestigationNarrative.tsx`, `IOCPanel.tsx`, `MitrePanel.tsx`, `BehavioralPanel.tsx`, `MLEntityBehavior.tsx`). Single "Run Analysis" button (changes to "Re-run Analysis" when a result exists). Results displayed across five tabs. When `windows_analyzed > 0` in the result, a `+AI` badge appears indicating Ollama narrative was used. Export button triggers `GET /api/report/deep`.
+- **Attack Storyline** — Session-based ATT&CK chain (`StorylinePanel.tsx`). Displays threat actor profile, lateral movement paths, and blast radius.
+- **LMD Analysis** — AD attack classifier results (`LMDPanel.tsx`, `LMDGraphView.tsx`). Shows per-class probabilities, confidence label, matched indicators, and pyvis graph.
 
-| Model | Metric | Score | Grade |
-|-------|--------|-------|-------|
-| LMD Random Forest | F1 (macro, attack classes) | 98% | **A** |
-| LMD Random Forest | Accuracy | 97% | **A** |
-| MITRE ATT&CK Mapper | Technique coverage | 100% | **A** |
-| Isolation Forest | AUC-ROC | requires trained model | — |
-
-The benchmark panel shows: per-model metric bars, confusion matrix, per-class precision/recall/F1, per-dataset accuracy, identified gaps, and full dataset citations.
-
----
-
-### Threat Intelligence Enrichment
-
-- **VirusTotal** — file hash and IP reputation lookups
-- **AbuseIPDB** — IP abuse confidence score
-- Applied to extracted IOCs during Deep AI Analysis
-- Cached in-process (max 4 external lookups per analysis) — no impact when API keys absent
+**Models**
+- **Model Quality** — Benchmark runner (`ModelQualityPanel.tsx`). Displays accuracy, macro F1, per-class metrics, and confusion matrix for LMD RF; coverage/hits/partials/misses for MITRE mapper; AUC-ROC and TPR@FPR≤10% for Isolation Forest. Letter grade: A (F1 ≥ 0.90), B (≥ 0.80), C (≥ 0.65), D otherwise.
+- **Model Settings** — Ground-truth labeling and ML metric summary. Analysts label analysis results as true/false positives; the backend computes precision, recall, F1, and accuracy from these labels.
 
 ---
 
-### Case Management
+## Authentication & Security
 
-- **Cases** track an investigation across multiple uploads, analyses, and notes
-- **Lifecycle**: `active` → `closed` → `archived`
-- **Analyst notes**: create/update/delete, pinnable, full-text searchable
-- **Multi-source merging**: uploads in the same Case produce a unified timeline with per-source color coding
-- **Status filters**: All / Active / Closed / Archived with event counts
+**JWT** — HS256, 4-hour expiry. Secret from `JWT_SECRET_KEY` env var (code default: `"change-this-in-production-please"`; must be overridden in production).
 
----
+**Passwords** — bcrypt via passlib. Admin account created on first startup with credentials from `ADMIN_PASSWORD` env var (code default: `"ForensicAdmin2024!"`).
 
-### Reporting & Exports
+**TOTP MFA** — RFC 6238, 30-second window. `pyotp` generates secrets; `qrcode` renders the enrollment QR code. Enabled per-user via the `/auth/totp/setup` → `/auth/totp/enable` flow.
 
-| Report | Format | Contents |
-|--------|--------|----------|
-| **Quick Scan Snapshot** | Self-contained HTML | MITRE, IOCs, severity, ML scores |
-| **Deep AI Intelligence Report** | Self-contained HTML | Full narrative, patient zero, pivot chain, all findings |
-| **Court-Ready Forensic Report** | Print-ready HTML | Chain-of-custody, SHA-256 hashes, attestation section |
-| **Case Forensic Report** | Self-contained HTML | All uploads, analyses, and notes for the case |
-| **IOC Export — CSV** | CSV | Extracted indicators |
-| **IOC Export — STIX 2.1** | JSON | Machine-readable threat intel bundle |
+**Security headers** — Applied to every response by `SecurityHeadersMiddleware` in `main.py`:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `X-XSS-Protection: 1; mode=block`
+- `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://cdn.jsdelivr.net; connect-src 'self'`
+
+**CORS** — Allowed origins: `http://localhost:5173`, `http://localhost:3000`, `http://127.0.0.1:5173`.
 
 ---
 
-### Analyst Tools
+## Accepted File Formats
 
-#### Timeline
-- Chronological event table with color-coded rows: amber (suspicious keyword), blue (logon/Kerberos), purple (network/PCAP)
-- Multi-source legend with per-file color coding
+| Extension | Source Type | Parser |
+|---|---|---|
+| `.csv` | `plaso`, `timesketch`, `velociraptor`, `generic` | `parser.py` |
+| `.json` | `generic` | `parser.py` |
+| `.jsonl` | `timesketch`, `velociraptor`, `generic` | `parser.py` |
+| `.pcap` | `pcap` | `pcap_parser.py` (pyshark) |
+| `.pcapng` | `pcap` | `pcap_parser.py` (pyshark) |
 
-#### Attack Graph
-- Interactive Cytoscape.js graph — hosts and users as nodes, observed connections as edges
-- Suspicious node/edge highlighting; per-upload source filtering
+Maximum file size: 100 MB per upload.
 
-#### LMD Attack Graph
-- Separate graph in the LMD Analysis section — shows attacker → victim edges per detected AD technique
-- Colored by attack class (Kerberoasting, DCSync, Lateral Movement, etc.)
-
-#### Filter Bar
-- Host / User / Event Type dropdowns; AND composition; persists until cleared
-
-#### Global Search
-- Full-text across all events and analyst notes
-- **Ctrl+K** / **Cmd+K** shortcut · 300 ms debounce · match highlighting
-
-#### Analyst Chat
-- LLM Q&A against the loaded timeline
-- Conversation history per session; suggested starter questions
+`parser.py` uses priority-ordered field name resolution for host entity extraction (`hostname` > `host` > `source_host` > `computername` > `workstationname` > `devicename`). Domain suffixes stripped during normalization: `.corp.local`, `.corp`, `.local`, `.internal`, `.lan`, `.ad`, `.domain`, `.home`. Hostnames are upper-cased for consistency. Timestamps are parsed against six format strings; an unrecognized format raises a `ValueError` explicitly.
 
 ---
 
-## AD Attack Specialization
-
-FIP is built around the Windows Active Directory attack kill chain. All detection layers are tuned for it.
-
-### Full kill chain coverage
-
-| Stage | Attack | Detection Layer |
-|-------|--------|----------------|
-| Initial Access | Phishing / HTA delivery | MITRE T1566/T1218.005, Email gateway log parsing |
-| Execution | Encoded PowerShell stager | MITRE T1059.001, Attack Classifier |
-| Persistence | Registry Run key, scheduled task | MITRE T1547.001/T1053.005 |
-| Reconnaissance | BloodHound / SharpHound LDAP burst | LMD class 5, IF kerberos_ticket_rate |
-| Credential Access | Kerberoasting (EID 4769 RC4) | LMD class 1, MITRE T1558.003 |
-| Credential Access | AS-REP Roasting | LMD class 1, MITRE T1558.004 |
-| Credential Access | LSASS dump (procdump/comsvcs) | LMD class 2, MITRE T1003.001 |
-| Credential Access | DCSync (EID 4662 replication GUIDs) | LMD class 2, MITRE T1003.006 |
-| Lateral Movement | PsExec / SMB admin shares | LMD class 4, MITRE T1021.002 |
-| Lateral Movement | WMI remote execution | LMD class 4, MITRE T1047 |
-| Lateral Movement | Pass-the-Hash (logon type 9) | LMD class 4, MITRE T1550.002 |
-| Lateral Movement | Pass-the-Ticket / Golden Ticket | LMD class 3/4, MITRE T1550.003/T1558.001 |
-| Privilege Escalation | Golden/Silver Ticket | LMD class 3, MITRE T1558.001/T1558.002 |
-| Persistence | Backdoor account (EID 4720/4728) | MITRE T1136.001/T1098.007, Storyline |
-| Defense Evasion | Log clearing (EID 1102) | Storyline engine |
-| Defense Evasion | Skeleton Key (lsass patch) | MITRE T1207 |
-
-### Windows Security Event IDs with first-class support
-
-| Event ID | Meaning | Detection |
-|----------|---------|-----------|
-| 4624 / 4625 | Logon success / failure | Brute force, lateral movement, PTH |
-| 4648 | Explicit-credential logon | Pass-the-Hash |
-| 4662 | AD object access | DCSync (1131f6aa GUID), BloodHound LDAP |
-| 4668 / 4672 | Special privileges | SeDebugPrivilege, off-hours escalation |
-| 4688 | Process creation | LOLBin, Rubeus, SharpHound, procdump |
-| 4698 / 4699 | Scheduled task create/delete | Persistence |
-| 4720 / 4726 | Account created/deleted | Backdoor account |
-| 4728 / 4732 / 4756 | Security group member added | DA group persistence |
-| 4739 | Domain policy changed | Domain policy modification |
-| 4768 / 4769 / 4771 | Kerberos TGT/TGS/failure | Kerberoasting, AS-REP, Golden Ticket |
-| 4776 | NTLM auth | Pass-the-Hash pivot |
-| 5140 | Network share access | PsExec ADMIN$ staging |
-| 7045 | New service installed | PsExec service, persistence |
-
----
-
-## Tech Stack
-
-### Backend
-
-| Component | Library / Version |
-|-----------|-------------------|
-| API framework | FastAPI |
-| ORM / database | SQLAlchemy + SQLite |
-| Auth | python-jose (JWT) · pyotp (TOTP) · passlib (bcrypt) |
-| ML models | scikit-learn (Isolation Forest, Random Forest) · joblib |
-| Graph generation | pyvis |
-| PCAP parsing | Scapy |
-| Threat intel | requests → VirusTotal API, AbuseIPDB API |
-| LLM | Configurable via `.env` (local Ollama) |
-
-### Frontend
-
-| Component | Library |
-|-----------|---------|
-| Framework | React 18 + TypeScript |
-| Build tool | Vite |
-| Styling | Tailwind CSS v3 |
-| Graph (attack graph) | Cytoscape.js |
-| Graph (LMD) | pyvis HTML + React iframe |
-| HTTP client | Fetch API (typed client in `src/api/client.ts`) |
-
-### Design System
-
-| Role | Value |
-|------|-------|
-| Base background | `#030712` Gray-950 |
-| Surface | `#0f172a` Slate-900 |
-| Elevated surface | `#1e293b` Slate-800 |
-| Primary accent | `#00F0FF` Cerenkov Blue |
-| Critical alert | `#FF6B00` Atomic Orange |
-
----
-
-## Getting Started
+## Installation
 
 ### Prerequisites
 
 - Python 3.11+
 - Node.js 18+
-- (Optional) Ollama running locally for LLM analysis without cloud API keys
+- (Optional) [Ollama](https://ollama.com) running locally for LLM narrative generation
 
 ### Backend
 
 ```bash
+python -m venv .venv
+
+# Windows
+.venv\Scripts\activate
+# Linux/macOS
+source .venv/bin/activate
+
 pip install -r requirements.txt
-cp .env.example .env
-# Edit .env — set JWT_SECRET_KEY and ADMIN_PASSWORD at minimum
-uvicorn backend.main:app --reload --port 8000
+
+# Create .env (see Environment Variables section)
+# Then start the server:
+uvicorn main:app --reload
 ```
+
+The database (`forensic.db`) and default `admin` account are created automatically on first startup. The server reloads only when files under `backend/` change (`reload_dirs=["backend"]`).
 
 ### Frontend
 
@@ -493,50 +386,60 @@ uvicorn backend.main:app --reload --port 8000
 cd frontend
 npm install
 npm run dev
-# Vite dev server: http://localhost:5173
 ```
 
-### Default Credentials
-
-- **Username**: `admin`
-- **Password**: value of `ADMIN_PASSWORD` in `.env`
-
-MFA is optional until an admin completes TOTP setup at **Settings → MFA Setup**.
-
----
-
-## Sample Data
-
-`sample_data/` contains categorized demo scenarios:
-
-| Folder | Contents |
-|--------|----------|
-| `01_AD_Full_Attack_Chain/` | **Complete multi-source AD attack scenario** — 7 complementary log files (DC Security log, Sysmon telemetry, firewall flows, DNS queries, email gateway) covering a full phishing → BloodHound → Kerberoasting → DCSync → Golden Ticket chain. Import all 7 as a single Case to see cross-source correlation. |
-| `02_APT_Cobalt_Strike/` | C2 beaconing and Cobalt Strike staging |
-| `03_Ransomware/` | Ransomware kill chain with VSS deletion |
-| `04_Insider_Threat/` | Data exfiltration by privileged insider |
-| `05_Linux_Web_Attack/` | Web shell and Linux post-exploitation |
-| `06_Windows_Techniques/` | LOLBAS, privilege escalation, WMI persistence |
-| `07_Quick_Test/` | Small files for quick upload testing |
-| `_lfs_unavailable/` | Large binary stubs (PCAP, CSV) — replace with real files |
-
-See `sample_data/01_AD_Full_Attack_Chain/README.md` for the full attack timeline and cross-source correlation guide.
+Dev server: `http://localhost:5173`. Backend must be running at `http://localhost:8000`.
 
 ---
 
 ## Environment Variables
 
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `JWT_SECRET_KEY` | Yes | Secret for JWT signing — use a long random string in production |
-| `ADMIN_PASSWORD` | Yes | Initial admin account password |
-| `LLM_PROVIDER` | No | `ollama` (default) |
-| `OLLAMA_MODEL` | No | Ollama model name (default: `llama3`) |
-| `VIRUSTOTAL_API_KEY` | No | Enables VirusTotal IOC enrichment |
-| `ABUSEIPDB_API_KEY` | No | Enables AbuseIPDB IP reputation lookups |
+All variables are read from `.env` in the project root.
+
+| Variable | Required | Default | Description |
+|---|---|---|---|
+| `DATABASE_URL` | Yes | `sqlite:///./forensic.db` | SQLAlchemy connection string |
+| `LLM_PROVIDER` | Yes | — | `ollama` to enable narrative generation; `none` to use deterministic fallback only |
+| `OLLAMA_MODEL` | If `ollama` | `llama3.2` | Model name passed to Ollama API |
+| `OLLAMA_BASE_URL` | If `ollama` | `http://localhost:11434` | Ollama HTTP base URL |
+| `VT_API_KEY` | No | — | VirusTotal v3 API key; IOC enrichment skipped if absent |
+| `ABUSEIPDB_KEY` | No | — | AbuseIPDB v2 API key; IP reputation skipped if absent |
+| `ADMIN_PASSWORD` | No | `ForensicAdmin2024!` | Password for the bootstrapped `admin` account |
+| `JWT_SECRET_KEY` | No | `change-this-in-production-please` | HS256 signing secret — override in production |
 
 ---
 
-## License
+## Model Files
 
-Internal research platform. All rights reserved.
+Pre-trained model binaries must be present at startup for ML features to work:
+
+| File | Used by | Description |
+|---|---|---|
+| `rf_model.pkl` | `backend/analysis/lmd_model.py` | Random Forest 6-class AD attack classifier |
+| `models/isolation_forest.pkl` | `backend/analysis/ml_anomaly.py` | Isolation Forest user anomaly scorer |
+
+Both are loaded once at module import time via `joblib.load()`. A missing file raises an error at runtime when the corresponding endpoint is first called.
+
+---
+
+## Model Quality Benchmark
+
+`GET /api/benchmark` runs three evaluations against embedded ground-truth data in `backend/evaluation/datasets.py` (structured after [OTRF/Security-Datasets](https://github.com/OTRF/Security-Datasets)):
+
+**LMD Random Forest** — accuracy, macro precision/recall/F1, per-class `ClassMetrics`, confusion matrix.
+
+**MITRE ATT&CK Mapper** — technique coverage: hits (exact match), partials, misses, per-technique breakdown across the benchmark set.
+
+**Isolation Forest** — ROC curve, AUC-ROC, TPR at FPR ≤ 10%.
+
+Grade assignment (`_grade(f1)` in `evaluator.py`): A (≥ 0.90), B (≥ 0.80), C (≥ 0.65), D otherwise. An overall grade is computed from the combined F1 of all three evaluations and returned in `BenchmarkReport.overall_grade`.
+
+---
+
+## Missing Context
+
+The following items could not be fully verified from source code alone:
+
+- **`rf_model.pkl` training** — The model binary is referenced in `lmd_model.py` but no training script exists in this repository. The 18 input features are known (hardcoded in `lmd_model.py`), but training set size, class balance, cross-validation methodology, and dataset provenance are not documented in code.
+- **`models/isolation_forest.pkl` training** — `backend/analysis/ml_synthetic.py` exists and likely generates synthetic training data, but its role in producing the shipped `.pkl` is not confirmed from code alone.
+- **Ollama prompt format** — The exact system prompt and message structure sent to Ollama is in `backend/analysis/llm.py` and was not included in this audit.

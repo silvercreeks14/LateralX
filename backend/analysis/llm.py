@@ -407,9 +407,8 @@ def _build_deterministic_narrative(
             f"{len(tactics)} tactic(s): {tech_names}{suffix}."
         )
     if iocs:
-        type_counts: dict[str, int] = {}
-        for ioc in iocs:
-            type_counts[ioc.type] = type_counts.get(ioc.type, 0) + 1
+        from collections import Counter
+        type_counts = Counter(ioc.type for ioc in iocs)
         ioc_summary = ", ".join(f"{v} {k}" for k, v in list(type_counts.items())[:4])
         parts.append(f"Extracted {len(iocs)} IOC(s): {ioc_summary}.")
     parts.append(f"Severity: {sev_label} ({severity}/100).")
@@ -437,10 +436,16 @@ def _build_deterministic_result(
     """
     patient_zero = suspicious_users[0] if suspicious_users else ""
 
-    initial_access_techs = [
-        t for t in techniques
-        if "initial" in t.tactic.lower() or "phish" in t.name.lower() or "exploit" in t.name.lower()
-    ]
+    # When lateral movement wasn't detected (suspicious_users is empty), derive patient
+    # zero from the first high-signal event that carries a non-machine user identity.
+    if not patient_zero:
+        _PATIENT_EIDS = frozenset({'4104', '4662', '4769', '4672', '4698', '4688', '1102'})
+        for _e in sorted(events, key=lambda x: x.timestamp):
+            if _e.user and not _e.user.endswith('$') and _e.event_id in _PATIENT_EIDS:
+                patient_zero = _e.user
+                break
+
+    initial_access_techs = [t for t in techniques if t.tactic == "Initial Access"]
     if initial_access_techs:
         t = initial_access_techs[0]
         initial_access_vector = f"{t.name} ({t.id})"
@@ -457,13 +462,17 @@ def _build_deterministic_result(
             )
 
     anomalous_events = [f"{t.id} {t.name} ({t.tactic})" for t in techniques]
-    high_risk_ml = [s for s in ml_scores if s.risk_level in ("high_risk", "suspicious")]
-    for s in high_risk_ml[:10]:
-        anomalous_events.append(
-            f"ML anomaly: {s.entity} — {s.risk_level.replace('_', ' ')} (score {s.anomaly_score:.2f})"
-        )
+    ml_added = 0
+    for s in ml_scores:
+        if ml_added >= 10:
+            break
+        if s.risk_level in ("high_risk", "suspicious"):
+            anomalous_events.append(
+                f"ML anomaly: {s.entity} — {s.risk_level.replace('_', ' ')} (score {s.anomaly_score:.2f})"
+            )
+            ml_added += 1
 
-    confidence = "medium" if (techniques and len(techniques) >= 3) else ("low" if not techniques else "medium")
+    confidence = "medium" if len(techniques) >= 3 else "low"
 
     return RCAResult(
         patient_zero_candidate=patient_zero,
@@ -566,6 +575,6 @@ def run_full_analysis(events: list[ForensicEvent]) -> RCAResult:
             narrative_citations=narrative_citations,
         )
 
-    except Exception as exc:
+    except (requests.exceptions.RequestException, json.JSONDecodeError, ValueError, RuntimeError) as exc:
         log.warning("LLM analysis unavailable (%s); returning comprehensive deterministic result", exc)
         return _build_deterministic_result(events, techniques, iocs, suspicious_users, severity, ml_scores)

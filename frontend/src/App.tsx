@@ -206,10 +206,10 @@ export default function App() {
 
   const handleRunAnalysis = async (uploadId?: number | null) => {
     setRcaLoading(true); setError(null)
+    switchSection('analysis')
     try {
       const result = await api.runAnalysis(activeCaseId, uploadId ?? null)
       setRca(result)
-      switchSection('analysis')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Analysis failed')
     } finally { setRcaLoading(false) }
