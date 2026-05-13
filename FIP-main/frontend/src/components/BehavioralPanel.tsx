@@ -5,6 +5,9 @@ import type { BehavioralReport, BehavioralAnomaly } from '../types'
 interface Props {
   activeCaseId: string | null
   selectedUploadId: number | null
+  report: BehavioralReport | null
+  loading: boolean
+  onRun: () => void
 }
 
 const ANOMALY_LABELS: Record<string, string> = {
@@ -73,21 +76,15 @@ function AnomalyCard({ a }: { a: BehavioralAnomaly }) {
   )
 }
 
-export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Props) {
-  const [report, setReport] = useState<BehavioralReport | null>(null)
-  const [loading, setLoading] = useState(false)
+export default function BehavioralPanel({ activeCaseId, selectedUploadId, report, loading, onRun }: Props) {
   const [error, setError] = useState<string | null>(null)
 
-  const run = async () => {
-    setLoading(true)
+  const handleRun = async () => {
     setError(null)
     try {
-      const r = await api.mlBehavioral(activeCaseId, selectedUploadId)
-      setReport(r)
+      await onRun()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Behavioral analysis failed')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -105,7 +102,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
           </p>
         </div>
         <button
-          onClick={run}
+          onClick={handleRun}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 text-slate-900"
           style={{ background: '#00F0FF' }}

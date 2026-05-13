@@ -21,10 +21,10 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
   const [updatingId, setUpdatingId] = useState<string | null>(null)
 
-  // Evidence management state
   const [caseUploads, setCaseUploads] = useState<Upload[]>([])
   const [uploadsLoading, setUploadsLoading] = useState(false)
   const [deletingUploadId, setDeletingUploadId] = useState<number | null>(null)
+  const [reportGenerating, setReportGenerating] = useState<string | null>(null)
 
   const loadCases = useCallback(async () => {
     try {
@@ -100,11 +100,15 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
     }
   }
 
-  const handleExportCourtReport = async (caseId: string, e: React.MouseEvent) => {
+  const handleGenerateReport = async (caseId: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    setReportGenerating(caseId)
     try {
-      await api.downloadCaseCourtReport(caseId)
-    } catch { /* silent */ }
+      // Downloads a comprehensive HTML report covering all evidence, analyses, IOCs, and notes
+      await api.downloadCaseReport(caseId)
+    } catch { /* silent */ } finally {
+      setReportGenerating(null)
+    }
   }
 
   const handleDeleteUpload = async (uploadId: number, e: React.MouseEvent) => {
@@ -297,13 +301,22 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                         Restore
                       </button>
                     )}
-                    {/* Export court-ready report */}
+                    {/* Generate Report button */}
                     <button
-                      onClick={e => handleExportCourtReport(c.case_id, e)}
-                      className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:bg-slate-800"
-                      title="Export court-ready forensic report — black/white, chain-of-custody, attestation block"
+                      onClick={e => handleGenerateReport(c.case_id, e)}
+                      disabled={reportGenerating === c.case_id}
+                      className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border font-medium transition-all disabled:opacity-40"
+                      style={{
+                        background: reportGenerating === c.case_id ? 'transparent' : '#00F0FF12',
+                        borderColor: '#00F0FF40',
+                        color: '#00F0FF',
+                      }}
+                      title="Generate comprehensive HTML report (evidence, IOCs, MITRE, timeline)"
                     >
-                      Export Report
+                      <svg className="w-3 h-3 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      {reportGenerating === c.case_id ? 'Generating…' : 'Generate Report'}
                     </button>
                     {/* Delete */}
                     <button
@@ -375,12 +388,29 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
         <div className="rounded-lg px-4 py-2.5 text-xs flex items-center justify-between border"
           style={{ background: '#00F0FF12', borderColor: '#00F0FF30', color: '#00F0FF' }}>
           <span>Active case: <strong>{selected.title}</strong></span>
-          <button
-            onClick={() => { setSelectedId(null); onSelectCase?.(null) }}
-            className="opacity-60 hover:opacity-100 transition-opacity"
-          >
-            Deselect
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleGenerateReport(selected.case_id, { stopPropagation: () => {} } as React.MouseEvent)}
+              disabled={reportGenerating === selected.case_id}
+              className="inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded border font-semibold transition-all disabled:opacity-40"
+              style={{
+                background: reportGenerating === selected.case_id ? 'transparent' : '#00F0FF25',
+                borderColor: '#00F0FF60',
+                color: '#00F0FF',
+              }}
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {reportGenerating === selected.case_id ? 'Generating…' : 'Generate Report'}
+            </button>
+            <button
+              onClick={() => { setSelectedId(null); onSelectCase?.(null) }}
+              className="opacity-60 hover:opacity-100 transition-opacity"
+            >
+              Deselect
+            </button>
+          </div>
         </div>
       )}
     </div>

@@ -5,6 +5,9 @@ import type { AttackStoryline, AttackStep, LateralPath } from '../types'
 interface Props {
   activeCaseId: string | null
   selectedUploadId: number | null
+  storyline: AttackStoryline | null
+  loading: boolean
+  onRun: () => void
 }
 
 const TACTIC_COLORS: Record<string, string> = {
@@ -105,21 +108,15 @@ function LateralCard({ path }: { path: LateralPath }) {
   )
 }
 
-export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props) {
-  const [storyline, setStoryline] = useState<AttackStoryline | null>(null)
-  const [loading, setLoading] = useState(false)
+export default function StorylinePanel({ activeCaseId, selectedUploadId, storyline, loading, onRun }: Props) {
   const [error, setError] = useState<string | null>(null)
 
-  const run = async () => {
-    setLoading(true)
+  const handleRun = async () => {
     setError(null)
     try {
-      const s = await api.mlStoryline(activeCaseId, selectedUploadId)
-      setStoryline(s)
+      await onRun()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Storyline generation failed')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -137,7 +134,7 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
           </p>
         </div>
         <button
-          onClick={run}
+          onClick={handleRun}
           disabled={loading}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all disabled:opacity-50 text-slate-900"
           style={{ background: '#00F0FF' }}

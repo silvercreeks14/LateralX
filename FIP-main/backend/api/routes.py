@@ -447,6 +447,7 @@ def global_search(
 async def upload_evidence(
     file: UploadFile = File(...),
     case_id: str | None = Query(default=None, description="Optional case UUID to tag events with"),
+    parser_hint: str | None = Query(default=None, description="Force a specific parser: lmd | sysmon | plaso | timesketch | network | generic"),
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
@@ -504,7 +505,7 @@ async def upload_evidence(
             except Exception:
                 raise HTTPException(400, "Could not decode file as UTF-8.")
             try:
-                events = detect_and_parse(file.filename, content)
+                events = detect_and_parse(file.filename, content, parser_hint=parser_hint)
             except ValueError as exc:
                 raise HTTPException(400, str(exc))
     except HTTPException:

@@ -165,6 +165,7 @@ export default function NarrativePanel({
   const [citedEvent, setCitedEvent] = useState<ForensicEvent | null>(null)
   const [citedEventId, setCitedEventId] = useState<number | null>(null)
   const [citedEventLoading, setCitedEventLoading] = useState(false)
+  const [reportLoading, setReportLoading] = useState(false)
 
   useEffect(() => {
     api.getTiStatus().then(setTiStatus).catch(() => {})
@@ -198,6 +199,21 @@ export default function NarrativePanel({
       setCitedEventLoading(false)
     }
   }, [citedEventId])
+
+  const handleGenerateReport = useCallback(async () => {
+    setReportLoading(true)
+    try {
+      // Use case report when a case is active; fall back to analysis report
+      if (activeCaseId) {
+        await api.downloadCaseReport(activeCaseId)
+      } else {
+        const mode = (result?.windows_analyzed === 0) ? 'quick' : 'deep'
+        await api.downloadReport(mode)
+      }
+    } catch { /* silent */ } finally {
+      setReportLoading(false)
+    }
+  }, [activeCaseId, result])
 
   if (loading) {
     return (
@@ -358,22 +374,23 @@ export default function NarrativePanel({
             {baselineLoading ? 'Comparing…' : 'Compare Baseline'}
           </button>
 
-          {/* Export group — 2 options */}
+          {/* Single unified Generate Report button */}
           <div className="flex flex-wrap gap-2 border-l border-slate-700 pl-2 ml-1">
             <button
-              onClick={() => api.downloadReport(isQuickScan ? 'quick' : 'deep')}
-              className="text-xs border px-3 py-1.5 rounded-md text-slate-400 hover:text-slate-300 border-slate-700 hover:bg-slate-800"
-              title="Export this analysis as a self-contained HTML report"
+              onClick={handleGenerateReport}
+              disabled={reportLoading}
+              className="inline-flex items-center gap-1.5 text-xs border px-3 py-1.5 rounded-md font-medium transition-all disabled:opacity-40"
+              style={{
+                background: reportLoading ? 'transparent' : '#00F0FF15',
+                borderColor: '#00F0FF40',
+                color: '#00F0FF',
+              }}
+              title={activeCaseId ? 'Generate comprehensive case report (HTML)' : 'Generate analysis report (HTML)'}
             >
-              Analysis Report
-            </button>
-            <button
-              onClick={() => activeCaseId && api.downloadCaseReport(activeCaseId)}
-              disabled={!activeCaseId}
-              className="text-xs border px-3 py-1.5 rounded-md border-slate-700 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed text-slate-400 hover:text-slate-300"
-              title={activeCaseId ? 'Export comprehensive case report as HTML' : 'Select a case to export its full report'}
-            >
-              Case Report
+              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+              </svg>
+              {reportLoading ? 'Generating…' : 'Generate Report'}
             </button>
           </div>
         </div>

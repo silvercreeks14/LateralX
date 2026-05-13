@@ -169,10 +169,18 @@ export const api = {
   },
 
   // ── Upload
-  uploadFile: (file: File): Promise<UploadResponse> => {
+  uploadFile: (file: File, parserHint?: string | null): Promise<UploadResponse> => {
     const form = new FormData()
     form.append('file', file)
-    return request('/upload', { method: 'POST', body: form })
+    const qs = parserHint ? `?parser_hint=${encodeURIComponent(parserHint)}` : ''
+    return request(`/upload${qs}`, { method: 'POST', body: form })
+  },
+  uploadFileToCase: (file: File, caseId: string, parserHint?: string | null): Promise<UploadResponse> => {
+    const form = new FormData()
+    form.append('file', file)
+    const p = new URLSearchParams({ case_id: caseId })
+    if (parserHint) p.set('parser_hint', parserHint)
+    return request(`/upload?${p.toString()}`, { method: 'POST', body: form })
   },
   uploadBaseline: (file: File): Promise<{ status: string; baseline_events: number }> => {
     const form = new FormData()
@@ -267,13 +275,6 @@ export const api = {
     message: string
   }> => request('/audit-log/verify'),
 
-  // ── Upload with optional case tag
-  uploadFileToCase: (file: File, caseId: string): Promise<UploadResponse> => {
-    const form = new FormData()
-    form.append('file', file)
-    return request(`/upload?case_id=${encodeURIComponent(caseId)}`, { method: 'POST', body: form })
-  },
-
   // ── ML Anomaly Detection
   getMlStatus: (): Promise<MLModelStatus> =>
     request('/ml/status'),
@@ -293,6 +294,18 @@ export const api = {
     if (uploadId != null) p.set('upload_id', String(uploadId))
     const qs = p.toString()
     return request(`/ml/quick-scan${qs ? '?' + qs : ''}`, { method: 'POST' })
+  },
+  mlBehavioral: (caseId?: string | null, uploadId?: number | null): Promise<BehavioralReport> => {
+    const p = new URLSearchParams()
+    if (caseId) p.set('case_id', caseId)
+    if (uploadId != null) p.set('upload_id', String(uploadId))
+    return request(`/ml/behavioral?${p.toString()}`, { method: 'POST' })
+  },
+  mlStoryline: (caseId?: string | null, uploadId?: number | null): Promise<AttackStoryline> => {
+    const p = new URLSearchParams()
+    if (caseId) p.set('case_id', caseId)
+    if (uploadId != null) p.set('upload_id', String(uploadId))
+    return request(`/ml/storyline?${p.toString()}`, { method: 'POST' })
   },
 
   // ── ML Ground Truth & Stats
