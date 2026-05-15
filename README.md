@@ -182,11 +182,6 @@ Nine pre-built scenarios are included under `sample_data/` for testing and demon
 | `04_Insider_Threat/` | Insider threat indicators |
 | `05_Linux_Web_Attack/` | Linux web server compromise |
 | `06_Windows_Techniques/` | Windows-specific attack technique collection |
-| `07_Quick_Test/` | Minimal dataset for fast smoke-testing |
-| `08_AD_APT/` | Combined AD + APT scenario |
-| `09_AD_Advanced_Breach/` | Advanced persistent AD breach |
-
-Standalone files: `firewall_net_full.json` (408 KB netflow) and `host_sysmon_full.json` (204 KB Sysmon telemetry).
 
 ---
 
