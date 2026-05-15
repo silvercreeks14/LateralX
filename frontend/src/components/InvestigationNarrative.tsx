@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { api } from '../api/client'
 import type { RCAResult, ForensicEvent, NarrativeCitation } from '../types'
 
@@ -36,7 +36,7 @@ function CitationCallout({
           {event.user     && <div><span className="text-slate-500">user:</span>    {event.user}</div>}
           {event.event_id && <div><span className="text-slate-500">EventID:</span> {event.event_id}</div>}
           <div><span className="text-slate-500">type:</span> {event.event_type}</div>
-          <div className="mt-1.5 bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 break-all whitespace-pre-wrap leading-relaxed">
+          <div className="mt-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded px-2 py-1.5 text-xs text-slate-700 dark:text-slate-300 break-all whitespace-pre-wrap leading-relaxed">
             {event.description}
           </div>
         </div>
@@ -147,7 +147,7 @@ export default function InvestigationNarrative({ result }: Props) {
       {/* ── Patient zero + initial access ──────────────────────────────────── */}
       {(result.patient_zero_candidate || result.initial_access_vector) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
               Patient Zero Candidate
             </h3>
@@ -155,7 +155,7 @@ export default function InvestigationNarrative({ result }: Props) {
               {result.patient_zero_candidate || <span className="text-slate-600 italic">No candidate identified</span>}
             </p>
           </div>
-          <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
               Initial Access Vector
             </h3>
@@ -168,7 +168,7 @@ export default function InvestigationNarrative({ result }: Props) {
 
       {/* ── Pivot chain ────────────────────────────────────────────────────── */}
       {result.pivot_chain.length > 0 && (
-        <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
             Pivot Chain — Lateral Movement
           </h3>
@@ -185,7 +185,7 @@ export default function InvestigationNarrative({ result }: Props) {
 
       {/* ── Anomalous events ───────────────────────────────────────────────── */}
       {result.anomalous_events.length > 0 && (
-        <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
             Anomalous Events Detected
           </h3>

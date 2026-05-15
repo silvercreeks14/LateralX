@@ -5,11 +5,14 @@ Supports: Plaso L2T CSV, Timesketch JSONL, and generic CSV.
 
 import csv
 import json
+import logging
 import re
 from datetime import datetime as _dt, timezone as _tz
 from io import StringIO
 
 from backend.schema import ForensicEvent, RawSource
+
+log = logging.getLogger(__name__)
 
 
 def _extract_event_id(message: str) -> str | None:
@@ -297,9 +300,79 @@ def _build_windows_description(obj: dict) -> str:
     return " | ".join(parts)
 
 
+_NETWORK_SRC_KEYS = frozenset({"src_ip", "source_ip", "src_addr", "client_ip"})
+_NETWORK_DST_KEYS = frozenset({"dst_ip", "dest_ip", "destination_ip", "dst_addr"})
+_SYSMON_EID3_FIELDS = ("SourceIp", "SourcePort", "DestinationIp", "DestinationPort", "Image")
+
+
+def _is_network_record(obj: dict) -> bool:
+    lower_keys = {k.lower() for k in obj}
+    return bool(lower_keys & _NETWORK_SRC_KEYS) and bool(lower_keys & _NETWORK_DST_KEYS)
+
+
+def _promote_nested(obj: dict) -> dict:
+    """
+    Recursively flatten all nested dictionaries into the top-level dict.
+    This ensures that fields like winlog.event_data.SubjectUserName are
+    found by the resolution helpers (_resolve_host, _resolve_user).
+    """
+    merged = dict(obj)
+
+    def _recurse(d: dict):
+        for k, v in d.items():
+            # Promote the key if it's not already at the top level
+            if k not in merged or merged[k] is None:
+                merged[k] = v
+            if isinstance(v, dict):
+                _recurse(v)
+
+    # First pass: promote direct children (preserves existing logic)
+    for v in obj.values():
+        if isinstance(v, dict):
+            _recurse(v)
+
+    # Special case mappings for common ECS/Logstash patterns
+    event_sub = obj.get("event")
+    if isinstance(event_sub, dict) and "id" in event_sub:
+        merged.setdefault("event_id", str(event_sub["id"]))
+
+    log_sub = obj.get("log")
+    if isinstance(log_sub, dict):
+        src = log_sub.get("source")
+        if src:
+            merged.setdefault("hostname", src)
+            merged.setdefault("timestamp_desc", src)
+
+    # Normalize address field variants
+    _alt_src = merged.get("source_address") or merged.get("sourceaddress") or merged.get("saddr")
+    if _alt_src:
+        merged.setdefault("src_ip", _alt_src)
+    _alt_dst = merged.get("destination_address") or merged.get("destinationaddress") or merged.get("daddr")
+    if _alt_dst:
+        merged.setdefault("dst_ip", _alt_dst)
+    
+    _alt_dport = merged.get("destination_port") or merged.get("destinationport") or merged.get("dport")
+    if _alt_dport is not None:
+        merged.setdefault("dst_port", _alt_dport)
+    _alt_sport = merged.get("source_port") or merged.get("sourceport") or merged.get("sport")
+    if _alt_sport is not None:
+        merged.setdefault("src_port", _alt_sport)
+
+    return merged
+
+
 def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
     """
-    Parse a Timesketch JSONL export (one JSON object per line).
+    Parse Timesketch / simulation JSON exports in either format:
+      - Standard JSON array  (pretty-printed or compact)
+      - Single JSON object
+      - JSONL (one compact object per line)
+
+    Detection order:
+      1. Attempt json.loads(content) on the full string.
+         - list  → processed as a batch of event objects
+         - dict  → wrapped in a list and processed as a single event
+      2. On JSONDecodeError, fall back to line-by-line JSONL parsing.
 
     Primary field mappings:
       datetime / @timestamp / timestamp / time / EventTime  -> timestamp
@@ -330,15 +403,36 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
         "message", "description", "EventDescription",
         "event_id", "EventID", "eventid",
     }
+
+    # ── Phase 1: collect raw objects ─────────────────────────────────────────
+    objects: list[dict] = []
+
+    try:
+        parsed = json.loads(content)
+        if isinstance(parsed, list):
+            objects = [o for o in parsed if isinstance(o, dict)]
+        elif isinstance(parsed, dict):
+            objects = [parsed]
+        # scalar values (int, str, …) produce an empty list → no events
+    except json.JSONDecodeError:
+        # JSONL fallback: parse one object per non-empty line
+        for line in content.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+                if isinstance(obj, dict):
+                    objects.append(obj)
+            except json.JSONDecodeError:
+                log.warning("parse_timesketch_jsonl: skipped unparseable line: %s", line[:50])
+
+    # ── Phase 2: map objects to ForensicEvents ────────────────────────────────
     events: list[ForensicEvent] = []
 
-    for line in content.splitlines():
-        line = line.strip()
-        if not line:
-            continue
+    for obj in objects:
         try:
-            obj = json.loads(line)
-
+            obj = _promote_nested(obj)
             # Timestamp resolution: first matching key wins
             timestamp_raw: str = ""
             for key in _TS_KEYS:
@@ -366,8 +460,18 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
             if not message:
                 message = json.dumps(obj)
 
-            source_host = _resolve_host(obj)
-            user = _resolve_user(obj, message)
+            is_net = _is_network_record(obj)
+            if is_net:
+                low = {k.lower(): v for k, v in obj.items()}
+                source_host = str(
+                    low.get("src_ip") or low.get("source_ip") or low.get("src_addr") or "UNKNOWN-HOST"
+                )
+                user = None
+                _raw_source = RawSource.PCAP
+            else:
+                source_host = _resolve_host(obj)
+                user = _resolve_user(obj, message)
+                _raw_source = RawSource.TIMESKETCH
 
             # Prefer direct event_id field; fall back to regex from message text
             raw_eid = obj.get("event_id") or obj.get("EventID") or obj.get("eventid")
@@ -376,6 +480,15 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
             # Extra: all keys not consumed by the known field set
             extra = {k: v for k, v in obj.items() if k not in KNOWN_FIELDS}
 
+            # EID 3 (Sysmon Network Connection) from JSON: the network fields live in
+            # the message string rather than as structured keys — extract them so
+            # network_host_correlator can find SourceIp, DestinationIp, etc. in extra.
+            if event_id == "3" and not is_net and message:
+                for _f in _SYSMON_EID3_FIELDS:
+                    m = re.search(rf'{_f}:\s*(\S+)', message)
+                    if m:
+                        extra.setdefault(_f, m.group(1))
+
             events.append(
                 ForensicEvent(
                     timestamp=timestamp_raw,
@@ -383,13 +496,14 @@ def parse_timesketch_jsonl(content: str) -> list[ForensicEvent]:
                     source_host=source_host,
                     user=user,
                     description=message[:1000],
-                    raw_source=RawSource.TIMESKETCH,
+                    raw_source=_raw_source,
                     event_id=event_id,
                     extra=extra if extra else None,
                 )
             )
-        except Exception:
-            continue
+        except Exception as exc:
+            log.warning("parse_timesketch_jsonl: skipped row (%s): %s",
+                        type(exc).__name__, str(obj)[:50])
 
     return events
 
@@ -512,11 +626,6 @@ def parse_sysmon_csv(content: str) -> list[ForensicEvent]:
 
             host = _normalize_hostname(_get(row, "Computer", "SourceHostname", "hostname", "host"))
 
-            user = (
-                _normalize_username(_get(row, "User", "SourceUser", "SubjectUserName", "TargetUserName", "username"))
-                or _extract_user_from_description(description)
-            )
-
             # EventID may have a trailing '.0' (float-exported) — strip it
             raw_eid = _get(row, "EventID")
             event_id = raw_eid.split(".")[0] if raw_eid else None
@@ -557,10 +666,16 @@ def parse_sysmon_csv(content: str) -> list[ForensicEvent]:
                 {k: v for k, v in row.items() if v and v.strip() not in ("", "0", "-")}
             )
 
+            user = (
+                _normalize_username(_get(row, "User", "SourceUser", "SubjectUserName", "TargetUserName", "username"))
+                or _extract_user_from_description(description)
+            )
+
             extra: dict = {}
             for field in ("Image", "CommandLine", "ParentImage", "ParentCommandLine",
-                           "Hashes", "SourceIp", "DestinationIp", "DestinationPort",
-                           "Protocol", "RuleName", "TargetObject", "GrantedAccess"):
+                           "Hashes", "SourceIp", "SourcePort", "DestinationIp",
+                           "DestinationPort", "Protocol", "RuleName", "TargetImage",
+                           "TargetObject", "GrantedAccess"):
                 val = _get(row, field)
                 if val:
                     extra[field] = val
@@ -606,12 +721,15 @@ def parse_network_csv(content: str) -> list[ForensicEvent]:
 
     headers = [h.strip().lower() for h in reader.fieldnames]
 
-    ts_col    = _find_column(headers, ["timestamp", "datetime", "time", "date"])
-    src_col   = _find_column(headers, ["src_ip", "source_ip", "src_addr", "client_ip"])
-    dst_col   = _find_column(headers, ["dst_ip", "dest_ip", "destination_ip", "dst_addr", "server_ip"])
-    port_col  = _find_column(headers, ["dst_port", "dest_port", "dport", "port"])
-    proto_col = _find_column(headers, ["protocol", "proto", "transport"])
-    action_col= _find_column(headers, ["action", "verdict", "disposition"])
+    ts_col       = _find_column(headers, ["timestamp", "datetime", "time", "date"])
+    src_col      = _find_column(headers, ["src_ip", "source_ip", "src_addr", "client_ip"])
+    dst_col      = _find_column(headers, ["dst_ip", "dest_ip", "destination_ip", "dst_addr", "server_ip"])
+    sport_col    = _find_column(headers, ["src_port", "source_port", "sport"])
+    port_col     = _find_column(headers, ["dst_port", "dest_port", "dport", "port"])
+    proto_col    = _find_column(headers, ["protocol", "proto", "transport"])
+    action_col   = _find_column(headers, ["action", "verdict", "disposition"])
+    bytes_out_col = _find_column(headers, ["bytes_out", "bytes_sent", "bytes_transferred",
+                                           "out_bytes", "sent_bytes", "octets_out"])
 
     events: list[ForensicEvent] = []
     reader2 = csv.DictReader(StringIO(content))
@@ -629,12 +747,33 @@ def parse_network_csv(content: str) -> list[ForensicEvent]:
             action   = norm.get(action_col, "") if action_col else ""
 
             try:
+                src_port: int | None = int(norm.get(sport_col, "0") if sport_col else "0") or None
+            except ValueError:
+                src_port = None
+            try:
                 dst_port: int | None = int(norm.get(port_col, "0") if port_col else "0") or None
             except ValueError:
                 dst_port = None
+            try:
+                bytes_out: int | None = int(float(norm.get(bytes_out_col, "0") if bytes_out_col else "0")) or None
+            except ValueError:
+                bytes_out = None
 
             dst_str = f"{dst_ip}:{dst_port}" if dst_ip and dst_port else (dst_ip or "")
             desc = f"{protocol} {src_ip} → {dst_str}" + (f" [{action}]" if action else "")
+
+            extra: dict = {
+                "dst_ip":    dst_ip or "",
+                "dst_port":  dst_port,
+                "src_ip":    src_ip,
+                "protocol":  protocol,
+                "action":    action,
+                "client_ip": src_ip,   # WAF fallback: link attacker IP even when timestamps differ
+            }
+            if src_port:
+                extra["src_port"] = src_port
+            if bytes_out:
+                extra["bytes_out"] = bytes_out
 
             events.append(ForensicEvent(
                 timestamp=ts_raw,
@@ -642,14 +781,7 @@ def parse_network_csv(content: str) -> list[ForensicEvent]:
                 source_host=src_ip,
                 description=desc[:1000],
                 raw_source=RawSource.PCAP,
-                extra={
-                    "dst_ip":    dst_ip or "",
-                    "dst_port":  dst_port,
-                    "src_ip":    src_ip,
-                    "protocol":  protocol,
-                    "action":    action,
-                    "client_ip": src_ip,   # WAF fallback: link attacker IP even when timestamps differ
-                },
+                extra=extra,
             ))
         except Exception:
             continue

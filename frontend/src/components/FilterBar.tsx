@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import type { EventSummary } from '../types'
 
 interface Props {
@@ -6,7 +6,7 @@ interface Props {
   onFilterChange: (filters: Record<string, string>) => void
 }
 
-const selectClass = `bg-slate-800 border border-slate-700 text-white rounded-lg text-sm px-3 py-1.5
+const selectClass = `bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg text-sm px-3 py-1.5
   focus:outline-none focus:border-cyan-500/60 min-w-[160px] cursor-pointer`
 
 export default function FilterBar({ summary, onFilterChange }: Props) {
@@ -58,7 +58,7 @@ export default function FilterBar({ summary, onFilterChange }: Props) {
           <label className="text-xs text-transparent">clear</label>
           <button
             onClick={() => { setHost(''); setUser(''); setEventType(''); onFilterChange({}) }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-200 transition-colors"
           >
             Clear filters
           </button>

@@ -1,5 +1,6 @@
 from sqlalchemy import (
     Column, Integer, String, DateTime, JSON, Float, Boolean, Text,
+    UniqueConstraint,
     create_engine, text, inspect, event as sa_event,
 )
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
@@ -118,14 +119,6 @@ class IncidentPatternModel(Base):
     context = Column(String(500), nullable=True)
 
 
-class ChatMessageModel(Base):
-    """Persists analyst chat history across sessions."""
-    __tablename__ = "chat_messages"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    role = Column(String(20), nullable=False)     # "user" | "assistant"
-    content = Column(String(10000), nullable=False)
-
 
 class AuditLogModel(Base):
     """
@@ -212,6 +205,30 @@ class MLGroundTruthModel(Base):
     notes = Column(String(500), nullable=True)
 
 
+class IpIdentityModel(Base):
+    """
+    Incident-scoped IP-to-identity table.
+    One row per unique (case_id, ip_address) pair.
+    Rebuilt on every analysis run — stale rows for a case are deleted first.
+    """
+    __tablename__ = "ip_identity"
+    id         = Column(Integer, primary_key=True, autoincrement=True)
+    case_id    = Column(String(36), nullable=True, index=True)
+    ip_address = Column(String(45), nullable=False, index=True)
+    hostname   = Column(String(255), nullable=True)
+    users      = Column(JSON, nullable=True)      # list[str]
+    role       = Column(String(20), nullable=False, default="unknown")
+    confidence = Column(Integer, default=0)
+    first_seen = Column(DateTime, nullable=True)
+    last_seen  = Column(DateTime, nullable=True)
+    source_eids = Column(JSON, nullable=True)     # list[str]
+    source_count = Column(Integer, default=0)
+
+    __table_args__ = (
+        UniqueConstraint("case_id", "ip_address", name="uq_ip_identity_case_ip"),
+    )
+
+
 # ── Migration ──────────────────────────────────────────────────────────────────
 
 def _migrate_schema():
@@ -261,6 +278,10 @@ def _migrate_schema():
         "totp_secret":   "VARCHAR(64)",
         "totp_enabled":  "BOOLEAN DEFAULT 0",
     })
+
+
+    # ip_identity table (new — create_all handles it; no ALTER TABLE needed)
+    # Existing DBs will get the table on next startup via create_all below.
 
     # ── FTS5 virtual tables for global full-text search ────────────────────────
     with engine.connect() as conn:
@@ -350,10 +371,15 @@ def _migrate_schema():
                 END
             """))
             conn.commit()
-            # Populate FTS index from existing data (safe to re-run)
-            conn.execute(text("INSERT INTO events_fts(events_fts) VALUES('rebuild')"))
-            conn.execute(text("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')"))
-            conn.commit()
+            # Populate FTS index only when it is empty (first-time setup).
+            # Subsequent startups are kept current by the INSERT/UPDATE/DELETE
+            # triggers above — running rebuild on every startup with 100k+ rows
+            # takes 40+ seconds.
+            fts_count = conn.execute(text("SELECT COUNT(*) FROM events_fts")).scalar()
+            if fts_count == 0:
+                conn.execute(text("INSERT INTO events_fts(events_fts) VALUES('rebuild')"))
+                conn.execute(text("INSERT INTO notes_fts(notes_fts) VALUES('rebuild')"))
+                conn.commit()
         except Exception as exc:
             conn.rollback()
             print(f"[FTS5 migration] warning: {exc}")

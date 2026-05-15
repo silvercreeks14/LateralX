@@ -448,22 +448,50 @@ def _build_cross_source_scenario_graph(
     # Always prefer that over source_host (which may be the WAF device hostname).
     # Only non-RFC1918 IPs are classified as external_ip (orange hexagon);
     # internal IPs become plain host nodes so they don't pollute the scenario chain.
+    #
+    # Correlated sessions (enriched by network_host_correlator before graph build):
+    # extra["correlated_host"] / ["correlated_user"] replace the firewall's UNKNOWN-HOST
+    # attribution, merging the perimeter session onto the actual host/user nodes so the
+    # attack path is one continuous chain instead of two disconnected subgraphs.
     for e in pcap_events:
         extra = e.extra or {}
         src = _waf_src(e)
         dst = extra.get("dst_ip", "")
         if not src:
             continue
+
+        corr_host = extra.get("correlated_host")
+        corr_user = extra.get("correlated_user")
+        is_exfil  = extra.get("t1048_exfil", False)
+
+        try:
+            dst_port: int | None = int(extra.get("dst_port", 0)) or None
+        except (ValueError, TypeError):
+            dst_port = None
+        protocol = e.event_type.upper()
+
+        if corr_host:
+            # Merge: use the resolved host (and optional user) instead of the raw
+            # firewall src_ip so the PCAP session attaches to the correct host node.
+            ensure_node(corr_host, "host")
+            if corr_user:
+                ensure_node(corr_user, "user")
+                add_edge(corr_user, corr_host, e.timestamp.isoformat(),
+                         event_id=e.event_id or "", suspicious=is_exfil)
+            if dst:
+                dst_type = "external_ip" if _is_external_ip(dst) else "host"
+                ensure_node(dst, dst_type)
+                add_edge(corr_host, dst, e.timestamp.isoformat(),
+                         event_id=e.event_id or "", suspicious=True,
+                         attack_stage="compromise" if is_exfil else "")
+            continue   # skip default src→dst edge for this session
+
+        # Default: no host correlation — draw raw firewall src → dst edge
         src_type = "external_ip" if _is_external_ip(src) else "host"
         ensure_node(src, src_type)
         if dst:
             dst_type = "external_ip" if _is_external_ip(dst) else "host"
             ensure_node(dst, dst_type)
-            try:
-                dst_port: int | None = int(extra.get("dst_port", 0)) or None
-            except (ValueError, TypeError):
-                dst_port = None
-            protocol = e.event_type.upper()
             suspicious = _is_c2_like(protocol, dst_port)
             add_edge(src, dst, e.timestamp.isoformat(),
                      event_id=e.event_id or "", suspicious=suspicious)

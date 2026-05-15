@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { api } from '../api/client'
 import type {
   EntityAnomalyScore, MLModelStatus, BehavioralReport, BehavioralAnomaly,
@@ -54,7 +54,7 @@ function BehavioralAnomalyCard({ a }: { a: BehavioralAnomaly }) {
 
   return (
     <div
-      className="bg-slate-800/60 rounded-lg p-3.5 border-l-4"
+      className="bg-slate-100/60 dark:bg-slate-800/60 rounded-lg p-3.5 border-l-4"
       style={{ borderLeftColor: borderClr }}
     >
       <div className="flex items-start justify-between gap-3 mb-1.5">
@@ -62,7 +62,7 @@ function BehavioralAnomalyCard({ a }: { a: BehavioralAnomaly }) {
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500 flex-shrink-0">
             {BEHAV_TYPE_LABEL[a.anomaly_type] ?? a.anomaly_type}
           </span>
-          <span className="text-white text-xs font-mono truncate">{a.entity}</span>
+          <span className="text-slate-900 dark:text-white text-xs font-mono truncate">{a.entity}</span>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold uppercase flex-shrink-0 ${badgeCls}`}>
           {a.severity}
@@ -70,10 +70,10 @@ function BehavioralAnomalyCard({ a }: { a: BehavioralAnomaly }) {
       </div>
       <p className="text-slate-300 text-xs mb-2">{a.description}</p>
       <div className="flex items-center gap-4 text-xs text-slate-500">
-        <span>Observed: <span className="text-slate-300 font-mono">{a.observed.toFixed(1)}</span></span>
-        <span>Threshold: <span className="text-slate-300 font-mono">{a.threshold.toFixed(1)}</span></span>
+        <span>Observed: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.observed.toFixed(1)}</span></span>
+        <span>Threshold: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.threshold.toFixed(1)}</span></span>
         {a.z_score != null && (
-          <span>Z: <span className="text-slate-300 font-mono">{a.z_score.toFixed(2)}σ</span></span>
+          <span>Z: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.z_score.toFixed(2)}σ</span></span>
         )}
       </div>
       <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
@@ -130,7 +130,7 @@ export default function MLEntityBehavior({
   }
 
   return (
-    <div className="bg-slate-900 rounded-lg border border-slate-800 p-4 space-y-5">
+    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4 space-y-5">
 
       {/* ── Section header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
@@ -197,7 +197,7 @@ export default function MLEntityBehavior({
                         <button
                           onClick={() => onVerify(s.entity, false)}
                           disabled={verifying === s.entity}
-                          className="text-xs px-2 py-0.5 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 disabled:opacity-40"
+                          className="text-xs px-2 py-0.5 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
                           title="Mark as false alarm (False Positive)"
                         >
                           FP
@@ -273,7 +273,7 @@ export default function MLEntityBehavior({
                 { label: 'Window',            value: `${behavReport.analysis_window_hours.toFixed(1)}h`,             color: '#00F0FF' },
                 { label: 'Highest Severity',  value: behavReport.highest_severity.toUpperCase(),                     color: sevStatColor[behavReport.highest_severity] ?? '#64748b' },
               ].map(s => (
-                <div key={s.label} className="bg-slate-800 rounded-lg p-3 border border-slate-700">
+                <div key={s.label} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 border border-slate-700">
                   <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">{s.label}</p>
                   <p className="text-sm font-bold" style={{ color: s.color }}>{s.value}</p>
                 </div>

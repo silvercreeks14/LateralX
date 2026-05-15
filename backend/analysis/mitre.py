@@ -53,6 +53,29 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
       "icmp tunnel", "iodine", "nslookup -type=txt exfil"],
      MitreTechnique(id="T1048.003", name="Exfiltration Over Unencrypted Protocol", tactic="Exfiltration")),
 
+    # Large outbound transfer flagged by network correlator (bytes_out in description)
+    (["t1048 exfil", "large outbound transfer", "bytes_out", "data exfiltrated"],
+     MitreTechnique(id="T1048", name="Exfiltration Over Alternative Protocol", tactic="Exfiltration")),
+
+    # DDoS: network-level denial of service
+    # Includes Windows Filtering Platform event signatures (EID 5152/5156/5157 flood)
+    # and port exhaustion (EID 4227) which is a reliable DDoS symptom
+    (["ddos", "denial of service", "syn flood", "udp flood", "icmp flood",
+      "volumetric attack", "amplification attack", "connection flood",
+      "t1498", "network dos", "network denial",
+      "port exhaustion", "high rates of connections",
+      "filtering platform has blocked a packet",
+      "filtering platform has blocked a connection"],
+     MitreTechnique(id="T1498", name="Network Denial of Service", tactic="Impact")),
+
+    # Endpoint DoS: service timeouts and application-layer exhaustion
+    # EID 7011 (service transaction timeout) is a direct DDoS impact indicator
+    (["application layer dos", "http flood", "slow loris", "slowloris",
+      "endpoint dos", "resource exhaustion", "cpu exhaustion", "t1499",
+      "timeout.*waiting for a transaction", "w3svc", "world wide web publishing",
+      "service timed out", "iis timeout"],
+     MitreTechnique(id="T1499", name="Endpoint Denial of Service", tactic="Impact")),
+
     # ── AD Credential Attacks ────────────────────────────────────────────────
     # EIDs 4768/4769 fire on all Kerberos ticket activity — require explicit tooling keywords.
     (["kerberoast", "getuserspns", "as-rep roasting", "spn scan", "etype 0x17", "rc4-hmac"],

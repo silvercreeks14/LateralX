@@ -229,7 +229,9 @@ def _safe_parse_json(text: str) -> dict:
 
 def _call_ollama(prompt: str) -> dict:
     base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
-    model_name = os.getenv("OLLAMA_MODEL", "llama3.2")
+    # OLLAMA_ANALYSIS_MODEL overrides OLLAMA_MODEL for structured-JSON forensic inference.
+    # Recommended: models with strong instruction-following (llama3.2, mistral, deepseek-r1).
+    model_name = os.getenv("OLLAMA_ANALYSIS_MODEL") or os.getenv("OLLAMA_MODEL") or "llama3.2"
     try:
         response = requests.post(
             f"{base_url}/api/generate",

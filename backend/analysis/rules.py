@@ -299,7 +299,139 @@ def generate_behavioral_sigma_rules(events: list[ForensicEvent]) -> list[dict]:
     return rules
 
 
-def rules_to_text(sigma_rules: list[dict], snort_rules: list[str]) -> str:
+# Behavioral YARA patterns keyed by MITRE technique ID.
+# Each entry emits one named YARA rule when that technique appears in the result.
+_YARA_TECH_PATTERNS: dict[str, tuple[str, str, list[str]]] = {
+    # (rule_name, description, string_literals)
+    "T1003.001": (
+        "LateralX_LSASS_Credential_Dump",
+        "LSASS memory access — credential dumping (T1003.001)",
+        ['"lsass.exe"', '"SeDebugPrivilege"', '"MiniDumpWriteDump"', '"sekurlsa"'],
+    ),
+    "T1003.006": (
+        "LateralX_DCSync_Replication",
+        "DCSync via DRSUAPI replication call (T1003.006)",
+        ['"drsuapi"', '"DsGetNCChanges"', '"DS-Replication-Get-Changes"', '"IDL_DRSGetNCChanges"'],
+    ),
+    "T1558.003": (
+        "LateralX_Kerberoasting_TGS",
+        "Kerberoasting — RC4 TGS ticket requests (T1558.003)",
+        ['"$krb5tgs$"', '"RC4-HMAC"', '"etype 23"', '"kerberoast"'],
+    ),
+    "T1021.002": (
+        "LateralX_SMB_Lateral_Movement",
+        "SMB lateral movement via admin shares (T1021.002)",
+        [r'"\\ADMIN$"', r'"\\IPC$"', r'"\\C$"', '"net use"'],
+    ),
+    "T1059.001": (
+        "LateralX_Encoded_PowerShell",
+        "Obfuscated / encoded PowerShell execution (T1059.001)",
+        ['"-EncodedCommand"', '"encodedcommand" nocase', '"-enc " nocase', '"Invoke-Expression"'],
+    ),
+    "T1047": (
+        "LateralX_WMI_Execution",
+        "WMI lateral execution via Win32_Process (T1047)",
+        ['"wmiexec"', '"Win32_Process"', '"WMI"', '"GetObject"'],
+    ),
+    "T1070.001": (
+        "LateralX_EventLog_Clearing",
+        "Windows event log clearing (T1070.001)",
+        ['"wevtutil cl"', '"Clear-EventLog"', '"Clear-WinEvent"', '"wevtutil" nocase'],
+    ),
+    "T1055": (
+        "LateralX_Process_Injection",
+        "Process injection API sequence (T1055)",
+        ['"VirtualAllocEx"', '"WriteProcessMemory"', '"CreateRemoteThread"', '"NtCreateThreadEx"'],
+    ),
+    "T1548": (
+        "LateralX_Token_Privilege_Escalation",
+        "Token privilege escalation (T1548)",
+        ['"SeImpersonatePrivilege"', '"SeTcbPrivilege"', '"AdjustTokenPrivileges"', '"ImpersonateLoggedOnUser"'],
+    ),
+    "T1041": (
+        "LateralX_Exfiltration_Channel",
+        "Data exfiltration over C2 channel (T1041)",
+        ['"Content-Length:"', '"POST /"', '"User-Agent:"', '"application/octet-stream"'],
+    ),
+}
+
+
+def generate_yara_rules(
+    iocs: list[IOC],
+    techniques: list[MitreTechnique],
+) -> list[str]:
+    """
+    Return YARA rule strings.
+
+    Two categories:
+    - Hash rules: one rule per unique MD5/SHA256 IOC, matching by file hash.
+    - Behavioral rules: one rule per detected MITRE technique ID that has a
+      known behavioral string-match pattern in _YARA_TECH_PATTERNS.
+    """
+    rules: list[str] = []
+
+    # ── Hash-based file rules ─────────────────────────────────────────────────
+    hashes: dict[str, list[str]] = {"md5": [], "sha256": []}
+    for ioc in iocs:
+        if ioc.type == "md5":
+            hashes["md5"].append(ioc.value)
+        elif ioc.type == "sha256":
+            hashes["sha256"].append(ioc.value)
+
+    if hashes["md5"] or hashes["sha256"]:
+        cond_parts: list[str] = []
+        if hashes["md5"]:
+            md5_list = ", ".join(f'"{h}"' for h in hashes["md5"][:20])
+            cond_parts.append(f"hash.md5(0, filesize) in ({md5_list})")
+        if hashes["sha256"]:
+            sha_list = ", ".join(f'"{h}"' for h in hashes["sha256"][:20])
+            cond_parts.append(f"hash.sha256(0, filesize) in ({sha_list})")
+        condition = " or\n        ".join(cond_parts)
+        rules.append(
+            f'import "hash"\n\n'
+            f"rule LateralX_IOC_File_Hash\n{{\n"
+            f"    meta:\n"
+            f'        description = "File hash IOC match — extracted from LateralX incident analysis"\n'
+            f'        author      = "LateralX Auto-Generator"\n'
+            f'        severity    = "high"\n'
+            f"    condition:\n"
+            f"        {condition}\n"
+            f"}}"
+        )
+
+    # ── Behavioral technique rules ────────────────────────────────────────────
+    seen_techs: set[str] = set()
+    for tech in techniques:
+        tech_id = tech.id
+        # Also check parent technique (e.g. T1003 for T1003.001)
+        candidates = {tech_id, tech_id.split(".")[0]}
+        for tid in candidates:
+            if tid in seen_techs or tid not in _YARA_TECH_PATTERNS:
+                continue
+            seen_techs.add(tid)
+            rule_name, description, strings = _YARA_TECH_PATTERNS[tid]
+            str_defs = "\n".join(
+                f"        $s{i} = {s}" for i, s in enumerate(strings)
+            )
+            str_cond = " or ".join(f"$s{i}" for i in range(len(strings)))
+            rules.append(
+                f"rule {rule_name}\n{{\n"
+                f"    meta:\n"
+                f'        description = "{description}"\n'
+                f'        author      = "LateralX Auto-Generator"\n'
+                f'        mitre_id    = "{tid}"\n'
+                f'        severity    = "high"\n'
+                f"    strings:\n"
+                f"{str_defs}\n"
+                f"    condition:\n"
+                f"        {str_cond}\n"
+                f"}}"
+            )
+
+    return rules
+
+
+def rules_to_text(sigma_rules: list[dict], snort_rules: list[str], yara_rules: list[str] | None = None) -> str:
     """Produce a combined human-readable block for display or copy-paste."""
     lines: list[str] = []
 
@@ -320,6 +452,10 @@ def rules_to_text(sigma_rules: list[dict], snort_rules: list[str]) -> str:
             lines.append(f"level: {r['level']}")
             lines.append(f"tags: {r['tags']}")
             lines.append("---")
+
+    if yara_rules:
+        lines.append("\n# ── YARA Rules ───────────────────────────────────────────────")
+        lines.extend(yara_rules)
 
     if snort_rules:
         lines.append("\n# ── Snort / Suricata Rules ───────────────────────────────────")

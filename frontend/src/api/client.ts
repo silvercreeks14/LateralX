@@ -1,18 +1,19 @@
 import type {
   ForensicEvent, EventSummary, UploadResponse, RCAResult,
-  GraphData, ChatMessage, BaselineComparisonResult, IncidentPattern, AuditEntry,
+  GraphData, BaselineComparisonResult, IncidentPattern, AuditEntry,
   LoginResponse, MLModelStatus, Case, CaseUpdate, Note, MLStats, DetectionRulesResponse,
   ThreatIntelStatus, Upload, SearchResponse, TotpStatus, TotpSetupResult, NarrativeCitation,
   BehavioralReport, BehavioralAnomaly, AttackStoryline, AttackStep, LateralPath, BlastRadius,
-  EntityAnomalyScore, LMDResult, BenchmarkReport,
+  EntityAnomalyScore,
+  ADRulesResult, PrivilegeTimelineResult, ADEntityIntelResult,
 } from '../types'
 
 // Re-export so components don't need a second import path
 export type { NarrativeCitation, BehavioralReport, BehavioralAnomaly, AttackStoryline, AttackStep, LateralPath, BlastRadius, EntityAnomalyScore }
 
 const BASE = '/api'
-const TOKEN_KEY = 'fip_token'
-const USER_KEY = 'fip_user'
+const TOKEN_KEY = 'lx_token'
+const USER_KEY = 'lx_user'
 
 // ── Token helpers ──────────────────────────────────────────────────────────────
 
@@ -50,19 +51,29 @@ export function getStoredUser(): { username: string; role: string } | null {
 
 // ── Token refresh (raw fetch — bypasses request() to prevent recursion) ────────
 
+// Single in-flight promise shared across concurrent callers so a burst of requests
+// near token expiry only fires one /auth/refresh round-trip.
+let _refreshInFlight: Promise<void> | null = null
+
 export async function silentRefresh(): Promise<void> {
+  if (_refreshInFlight) return _refreshInFlight
   const token = getToken()
   if (!token) return
-  try {
-    const res = await fetch(`${BASE}/auth/refresh`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    })
-    if (res.ok) {
-      const data = await res.json()
-      setToken(data.access_token, data.username, data.role)
+  _refreshInFlight = (async () => {
+    try {
+      const res = await fetch(`${BASE}/auth/refresh`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setToken(data.access_token, data.username, data.role)
+      }
+    } catch { /* silent */ } finally {
+      _refreshInFlight = null
     }
-  } catch { /* silent */ }
+  })()
+  return _refreshInFlight
 }
 
 // ── Request core ───────────────────────────────────────────────────────────────
@@ -215,14 +226,6 @@ export const api = {
     return request(`/graph${qs ? '?' + qs : ''}`)
   },
 
-  // ── Chat
-  chat: (message: string, history: ChatMessage[]): Promise<{ response: string }> =>
-    request('/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message, history }),
-    }),
-
   // ── IOCs
   getIocs: (): Promise<{ iocs: import('../types').IOC[]; total: number }> => request('/iocs'),
   exportIocsCsv: () => _downloadBlob('/iocs/export/csv', 'iocs.csv', 'text/csv'),
@@ -354,6 +357,12 @@ export const api = {
     request('/detection-rules?fmt=json'),
   downloadDetectionRules: () =>
     _downloadBlob('/detection-rules?fmt=text', 'detection_rules.txt', 'text/plain'),
+  downloadSigmaRules: () =>
+    _downloadBlob('/detection-rules?fmt=sigma', 'sigma_rules.yml', 'text/plain'),
+  downloadYaraRules: () =>
+    _downloadBlob('/detection-rules?fmt=yara', 'lateralx_rules.yar', 'text/plain'),
+  downloadSnortRules: () =>
+    _downloadBlob('/detection-rules?fmt=snort', 'snort_rules.rules', 'text/plain'),
 
   // ── Multi-source uploads (per case or global workspace)
   getCaseUploads: (caseId: string): Promise<Upload[]> =>
@@ -375,15 +384,6 @@ export const api = {
     return request(`/ml/behavioral${qs ? '?' + qs : ''}`, { method: 'POST' })
   },
 
-  // ── AD Lateral Movement Detection (standalone RF model)
-  runLmdAnalysis: (caseId?: string | null, uploadId?: number | null): Promise<LMDResult> => {
-    const p = new URLSearchParams()
-    if (caseId) p.set('case_id', caseId)
-    if (uploadId != null) p.set('upload_id', String(uploadId))
-    const qs = p.toString()
-    return request(`/lmd-analysis${qs ? '?' + qs : ''}`, { method: 'POST' })
-  },
-
   // ── Phase 3: Attack Storyline
   mlStoryline: (caseId?: string | null, uploadId?: number | null): Promise<AttackStoryline> => {
     const p = new URLSearchParams()
@@ -393,9 +393,32 @@ export const api = {
     return request(`/ml/storyline${qs ? '?' + qs : ''}`, { method: 'POST' })
   },
 
-  // ── Model Quality Benchmark
-  runBenchmark: (): Promise<BenchmarkReport> =>
-    request('/benchmark', { method: 'GET' }),
+  // ── AD Detection Engine
+  runADRules: (caseId?: string | null, uploadId?: number | null): Promise<ADRulesResult> => {
+    const p = new URLSearchParams()
+    if (caseId) p.set('case_id', caseId)
+    if (uploadId != null) p.set('upload_id', String(uploadId))
+    const qs = p.toString()
+    return request(`/analyze/ad-rules${qs ? '?' + qs : ''}`, { method: 'POST' })
+  },
+
+  // ── AD Privilege Timeline
+  runPrivilegeTimeline: (caseId?: string | null, uploadId?: number | null): Promise<PrivilegeTimelineResult> => {
+    const p = new URLSearchParams()
+    if (caseId) p.set('case_id', caseId)
+    if (uploadId != null) p.set('upload_id', String(uploadId))
+    const qs = p.toString()
+    return request(`/analyze/privilege-timeline${qs ? '?' + qs : ''}`, { method: 'POST' })
+  },
+
+  // ── AD Entity Intelligence
+  getADEntities: (caseId?: string | null, uploadId?: number | null): Promise<ADEntityIntelResult> => {
+    const p = new URLSearchParams()
+    if (caseId) p.set('case_id', caseId)
+    if (uploadId != null) p.set('upload_id', String(uploadId))
+    const qs = p.toString()
+    return request(`/ad-entities${qs ? '?' + qs : ''}`)
+  },
 
   // ── TOTP setup (admin only)
   getTotpStatus: (): Promise<TotpStatus> => request('/admin/totp/status'),

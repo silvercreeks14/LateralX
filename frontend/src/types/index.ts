@@ -110,32 +110,8 @@ export interface RCAResult {
   narrative_citations?: NarrativeCitation[]
   // v6: supervised attack-type classification
   attack_classification?: AttackClassification | null
-  lmd_graph?: { nodes: any[]; edges: any[] } | null
 }
 
-export interface LMDDetection {
-  event_index: number
-  attack_class: number
-  attack_name: string
-  attack_label: string
-  severity: 'none' | 'medium' | 'high' | 'critical'
-  color: string
-  source_ip: string
-  dest_ip: string
-  image: string
-  command_line: string
-  event_id: number
-  destination_port: number
-  matched_features: string[]
-}
-
-export interface LMDResult {
-  total_events: number
-  detections: LMDDetection[]
-  attack_counts: Record<string, number>
-  graph: { nodes: any[]; edges: any[] } | null
-  anomaly_strings: string[]
-}
 
 export interface ScenarioStep {
   step: number
@@ -181,11 +157,6 @@ export interface CyEdge {
     scenario_link?: boolean
     label?: string
   }
-}
-
-export interface ChatMessage {
-  role: 'user' | 'assistant'
-  content: string
 }
 
 export interface BaselineComparisonResult {
@@ -265,8 +236,10 @@ export interface ThreatIntelStatus {
 export interface DetectionRulesResponse {
   sigma: SigmaRule[]
   snort: string[]
+  yara: string[]
   sigma_count: number
   snort_count: number
+  yara_count: number
 }
 
 export interface Upload {
@@ -370,6 +343,7 @@ export interface BlastRadius {
 export interface AttackStoryline {
   threat_actor_profile: string
   entry_vector: string
+  patient_zero_host: string
   tactic_progression: string[]
   attack_steps: AttackStep[]
   lateral_paths: LateralPath[]
@@ -378,6 +352,111 @@ export interface AttackStoryline {
   confidence: string
   total_attack_steps: number
   total_lateral_paths: number
+}
+
+// ── AD Detection Engine ───────────────────────────────────────────────────────
+
+export interface ADRuleDetection {
+  rule_id: string
+  rule_name: string
+  category: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  mitre_id: string
+  mitre_tactic: string
+  confidence: 'low' | 'medium' | 'high'
+  entity: string
+  event_ids: number[]
+  evidence: string[]
+  timestamp: string
+}
+
+export interface AttackChain {
+  chain_id: string
+  actor: string
+  tactics: string[]
+  mitre_ids: string[]
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  detection_count: number
+  first_seen: string
+  last_seen: string
+  summary: string
+  detection_ids: string[]
+}
+
+export interface ToolSignatureHit {
+  tool_name: string
+  confidence: 'low' | 'medium' | 'high'
+  entity: string
+  timestamp: string
+  indicators: string[]
+  mitre_ids: string[]
+}
+
+export interface ADRulesResult {
+  total_events_analyzed: number
+  detections: ADRuleDetection[]
+  detection_count: number
+  categories_hit: string[]
+  highest_severity: 'none' | 'low' | 'medium' | 'high' | 'critical'
+  mitre_ids: string[]
+  attack_chains: AttackChain[]
+  tool_signatures: ToolSignatureHit[]
+}
+
+// ── AD Privilege Escalation Timeline ─────────────────────────────────────────
+
+export interface PrivilegeEvent {
+  timestamp: string
+  event_id: string
+  actor: string
+  target: string | null
+  action: string
+  detail: string
+  severity: 'low' | 'medium' | 'high' | 'critical'
+  mitre_id: string
+  db_event_id: number | null
+}
+
+export interface EscalationChain {
+  chain_id: string
+  actor: string
+  steps: PrivilegeEvent[]
+  total_duration_minutes: number
+  highest_severity: string
+  mitre_ids: string[]
+  summary: string
+}
+
+export interface PrivilegeTimelineResult {
+  privilege_events: PrivilegeEvent[]
+  escalation_chains: EscalationChain[]
+  total_privilege_events: number
+  unique_actors: number
+  highest_severity: string
+}
+
+// ── AD Entity Intelligence ────────────────────────────────────────────────────
+
+export interface ADEntity {
+  name: string
+  entity_type: 'user' | 'host' | 'group'
+  risk_score: number
+  risk_label: 'clean' | 'suspicious' | 'compromised'
+  first_seen: string
+  last_seen: string
+  event_count: number
+  associated_techniques: string[]
+  group_memberships: string[]
+  lateral_targets: string[]
+  anomaly_flags: string[]
+}
+
+export interface ADEntityIntelResult {
+  entities: ADEntity[]
+  total_entities: number
+  compromised_count: number
+  suspicious_count: number
+  top_risk_entity: string | null
 }
 
 // ── Model Quality / Benchmark ─────────────────────────────────────────────────
@@ -446,7 +525,6 @@ export interface BenchmarkReport {
   run_at: string
   overall_grade: string
   recommendations: string[]
-  lmd: ModelBenchmarkResult
   mitre: ModelBenchmarkResult
   anomaly: ModelBenchmarkResult
   benchmark_datasets: Record<string, string>

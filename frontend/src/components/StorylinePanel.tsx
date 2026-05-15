@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { api } from '../api/client'
 import type { AttackStoryline, AttackStep, LateralPath } from '../types'
 
@@ -41,11 +41,11 @@ function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
         >
           {step.step_number}
         </div>
-        {!isLast && <div className="w-px flex-1 bg-slate-800 mt-1" />}
+        {!isLast && <div className="w-px flex-1 bg-slate-200 dark:bg-slate-800 mt-1" />}
       </div>
 
       <div className="flex-1 pb-5">
-        <div className="bg-slate-800/60 rounded-xl p-4 border border-slate-700/40">
+        <div className="bg-slate-100/60 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-700/40">
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span
@@ -64,7 +64,7 @@ function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
             </span>
           </div>
 
-          <p className="text-white text-sm font-medium mb-1">{step.technique_name}</p>
+          <p className="text-white text-sm font-medium mb-1 text-slate-900 dark:text-white">{step.technique_name}</p>
           <p className="text-slate-400 text-xs mb-2">{step.description}</p>
 
           <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
@@ -90,7 +90,7 @@ function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
 
 function LateralCard({ path }: { path: LateralPath }) {
   return (
-    <div className="flex items-center gap-3 bg-slate-800/60 rounded-lg px-4 py-3 border border-slate-700/40">
+    <div className="flex items-center gap-3 bg-slate-100/60 dark:bg-slate-800/60 rounded-lg px-4 py-3 border border-slate-700/40">
       <span className="font-mono text-sm text-slate-300 truncate">{path.from_host}</span>
       <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"
         style={{ color: '#00F0FF' }}>
@@ -131,7 +131,7 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-white font-semibold text-lg">Attack Storyline</h2>
+          <h2 className="text-slate-900 dark:text-white font-semibold text-lg">Attack Storyline</h2>
           <p className="text-slate-500 text-sm mt-0.5">
             Deterministic ATT&amp;CK mapping · lateral path reconstruction · blast radius
           </p>
@@ -171,7 +171,7 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
       )}
 
       {!storyline && !loading && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
           <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-2">
             <svg className="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -189,11 +189,11 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
       {storyline && (
         <>
           {/* Actor profile banner */}
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
             <div className="flex items-start justify-between gap-4 mb-4">
               <div>
                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Threat Actor Profile</p>
-                <p className="text-white font-bold text-xl">{storyline.threat_actor_profile}</p>
+                <p className="text-slate-900 dark:text-white font-bold text-xl">{storyline.threat_actor_profile}</p>
               </div>
               <span
                 className="px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0"
@@ -285,7 +285,7 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
                 { label: 'Accessed Resources',      items: storyline.blast_radius.accessed_resources,     color: '#f59e0b' },
                 { label: 'Persistence Mechanisms',  items: storyline.blast_radius.persistence_mechanisms, color: '#8b5cf6' },
               ].map(section => (
-                <div key={section.label} className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+                <div key={section.label} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-800">
                   <p className="text-xs font-semibold mb-2" style={{ color: section.color }}>
                     {section.label}
                   </p>
@@ -304,7 +304,7 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
                 </div>
               ))}
             </div>
-            <div className="mt-3 bg-slate-900 rounded-xl px-4 py-3 border border-slate-800 flex items-center justify-between">
+            <div className="mt-3 bg-white dark:bg-slate-900 rounded-xl px-4 py-3 border border-slate-800 flex items-center justify-between">
               <span className="text-xs text-slate-500">Estimated Data at Risk</span>
               <span className="text-sm font-semibold text-orange-400">
                 {storyline.blast_radius.estimated_data_at_risk}

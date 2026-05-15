@@ -32,6 +32,7 @@ class ForensicEvent(BaseModel):
             "%Y-%m-%dT%H:%M:%S",
             "%Y-%m-%d %H:%M:%S",
             "%Y-%m-%dT%H:%M:%S.%f",
+            "%Y-%m-%dT%H:%M:%S.%fZ",
             "%Y-%m-%d %H:%M:%S.%f",
             "%m/%d/%Y %H:%M:%S",
             "%Y-%m-%dT%H:%M:%SZ",
@@ -85,6 +86,24 @@ class AttackClassification(BaseModel):
     mitre_techniques: list[str]    # MITRE ATT&CK IDs for primary category
 
 
+class NetworkAlert(BaseModel):
+    """Exfiltration or DDoS alert produced by the network correlation engine."""
+    alert_type: str           # "exfiltration" | "ddos_outbound" | "ddos_inbound"
+    severity: str             # "CRITICAL" | "HIGH"
+    mitre_technique: str
+    summary: str
+    src_ip: str = ""
+    dst_ip: str = ""
+    dst_port: int = 0
+    bytes_out: int = 0
+    connection_count: int = 0
+    distinct_sources: int = 0
+    host: str = ""
+    user: Optional[str] = None
+    process_image: str = ""
+    correlated: bool = False  # True = confirmed via 4-tuple host join
+
+
 class RCAResult(BaseModel):
     patient_zero_candidate: str
     initial_access_vector: str
@@ -99,12 +118,9 @@ class RCAResult(BaseModel):
     iocs: list[IOC] = []
     consensus_agreement: Optional[float] = None
     ml_anomaly_scores: list[UserAnomalyScore] = []
-    # v5: explainable AI — every narrative sentence mapped to its source event IDs
     narrative_citations: list[NarrativeCitation] = []
-    # v6: supervised attack-type classification
     attack_classification: Optional[AttackClassification] = None
-    # LMD Random Forest attack graph rendered inside AI Analysis
-    lmd_graph: Optional[dict] = None
+    network_alerts: list[NetworkAlert] = []
 
 
 class UploadResponse(BaseModel):
@@ -124,19 +140,6 @@ class EventSummary(BaseModel):
     event_types: list[str]
     time_range: Optional[dict] = None
 
-
-class ChatMessage(BaseModel):
-    role: str
-    content: str
-
-
-class ChatRequest(BaseModel):
-    message: str
-    history: list[ChatMessage] = []
-
-
-class ChatResponse(BaseModel):
-    response: str
 
 
 class BaselineComparisonResult(BaseModel):
@@ -314,6 +317,7 @@ class BlastRadius(BaseModel):
 class AttackStoryline(BaseModel):
     threat_actor_profile: str
     entry_vector: str
+    patient_zero_host: str = ''
     tactic_progression: list[str]
     attack_steps: list[AttackStep]
     lateral_paths: list[LateralPath]
@@ -365,11 +369,116 @@ class ModelBenchmarkResult(BaseModel):
     note: Optional[str] = None
 
 
+# ── AD Detection Engine ───────────────────────────────────────────────────────
+
+class ADRuleDetection(BaseModel):
+    rule_id: str                  # e.g. "KERB-001"
+    rule_name: str
+    category: str                 # "Kerberoasting" | "DCSync" | etc.
+    severity: str                 # "low" | "medium" | "high" | "critical"
+    mitre_id: str                 # e.g. "T1558.003"
+    mitre_tactic: str
+    confidence: str               # "low" | "medium" | "high"
+    entity: str                   # user or host that triggered
+    source_host: Optional[str] = ""  # host where entity was active (used by chain correlator)
+    event_ids: list[int] = []     # DB event PKs supporting detection
+    evidence: list[str] = []      # human-readable evidence strings
+    timestamp: str                # ISO timestamp of first matching event
+
+
+class AttackChain(BaseModel):
+    chain_id: str
+    actor: str
+    tactics: list[str]
+    mitre_ids: list[str]
+    severity: str
+    detection_count: int
+    first_seen: str
+    last_seen: str
+    summary: str
+    detection_ids: list[str] = []
+
+
+class ToolSignatureHit(BaseModel):
+    tool_name: str
+    confidence: str               # "low" | "medium" | "high"
+    entity: str
+    timestamp: str
+    indicators: list[str] = []
+    mitre_ids: list[str] = []
+
+
+class ADRulesResult(BaseModel):
+    total_events_analyzed: int
+    detections: list[ADRuleDetection]
+    detection_count: int
+    categories_hit: list[str]
+    highest_severity: str         # "none" | "low" | "medium" | "high" | "critical"
+    mitre_ids: list[str]
+    attack_chains: list[AttackChain] = []
+    tool_signatures: list[ToolSignatureHit] = []
+
+
+# ── AD Privilege Escalation Timeline ─────────────────────────────────────────
+
+class PrivilegeEvent(BaseModel):
+    timestamp: str
+    event_id: str
+    actor: str
+    target: Optional[str] = None
+    action: str
+    detail: str
+    severity: str                 # "low" | "medium" | "high" | "critical"
+    mitre_id: str
+    db_event_id: Optional[int] = None
+
+
+class EscalationChain(BaseModel):
+    chain_id: str
+    actor: str
+    steps: list[PrivilegeEvent]
+    total_duration_minutes: float
+    highest_severity: str
+    mitre_ids: list[str]
+    summary: str
+
+
+class PrivilegeTimelineResult(BaseModel):
+    privilege_events: list[PrivilegeEvent]
+    escalation_chains: list[EscalationChain]
+    total_privilege_events: int
+    unique_actors: int
+    highest_severity: str
+
+
+# ── AD Entity Intelligence ────────────────────────────────────────────────────
+
+class ADEntity(BaseModel):
+    name: str
+    entity_type: str              # "user" | "host" | "group"
+    risk_score: int               # 0-100
+    risk_label: str               # "clean" | "suspicious" | "compromised"
+    first_seen: str
+    last_seen: str
+    event_count: int
+    associated_techniques: list[str]  # MITRE IDs
+    group_memberships: list[str] = []
+    lateral_targets: list[str] = []   # hosts this entity touched
+    anomaly_flags: list[str] = []
+
+
+class ADEntityIntelResult(BaseModel):
+    entities: list[ADEntity]
+    total_entities: int
+    compromised_count: int
+    suspicious_count: int
+    top_risk_entity: Optional[str] = None
+
+
 class BenchmarkReport(BaseModel):
     run_at: str
     overall_grade: str
     recommendations: list[str]
-    lmd: ModelBenchmarkResult
     mitre: ModelBenchmarkResult
     anomaly: ModelBenchmarkResult
     benchmark_datasets: dict[str, str] = {}

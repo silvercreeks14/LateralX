@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+﻿import { useState, useRef, useEffect, useCallback } from 'react'
 import { api } from '../api/client'
 import type { SearchResponse } from '../types'
 
@@ -61,7 +61,7 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-[480px] bg-slate-900 rounded-xl shadow-2xl border border-slate-800 z-50 overflow-hidden">
+        <div className="absolute left-0 top-full mt-2 w-[480px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-800 z-50 overflow-hidden">
           <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
             <svg className="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -72,7 +72,7 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
               value={query}
               onChange={e => setQuery(e.target.value)}
               placeholder="Search events and notes…"
-              className="flex-1 text-sm outline-none bg-transparent text-white placeholder-slate-600"
+              className="flex-1 text-sm outline-none bg-transparent text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-600"
             />
             {loading && (
               <svg className="animate-spin w-4 h-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" style={{ color: '#00F0FF' }}>

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { api } from '../api/client'
 import type { BehavioralReport, BehavioralAnomaly } from '../types'
 
@@ -35,7 +35,7 @@ function AnomalyCard({ a }: { a: BehavioralAnomaly }) {
 
   return (
     <div
-      className="bg-slate-800/60 rounded-xl p-4 border-l-4"
+      className="bg-slate-100/60 dark:bg-slate-800/60 rounded-xl p-4 border-l-4"
       style={{ borderLeftColor: borderColor }}
     >
       <div className="flex items-start justify-between gap-3 mb-2">
@@ -43,20 +43,20 @@ function AnomalyCard({ a }: { a: BehavioralAnomaly }) {
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {ANOMALY_LABELS[a.anomaly_type] ?? a.anomaly_type}
           </span>
-          <span className="text-white text-sm font-mono">{a.user}</span>
+          <span className="text-slate-900 dark:text-white text-sm font-mono">{a.user}</span>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold uppercase flex-shrink-0 ${badgeClass}`}>
           {a.severity}
         </span>
       </div>
 
-      <p className="text-slate-300 text-sm mb-3">{a.description}</p>
+      <p className="text-slate-700 dark:text-slate-300 text-sm mb-3">{a.description}</p>
 
       <div className="flex items-center gap-4 text-xs text-slate-500">
-        <span>Observed: <span className="text-slate-300 font-mono">{a.observed.toFixed(1)}</span></span>
-        <span>Threshold: <span className="text-slate-300 font-mono">{a.threshold.toFixed(1)}</span></span>
+        <span>Observed: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.observed.toFixed(1)}</span></span>
+        <span>Threshold: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.threshold.toFixed(1)}</span></span>
         {a.z_score != null && (
-          <span>Z-score: <span className="text-slate-300 font-mono">{a.z_score.toFixed(2)}σ</span></span>
+          <span>Z-score: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.z_score.toFixed(2)}σ</span></span>
         )}
       </div>
 
@@ -99,7 +99,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-white font-semibold text-lg">Behavioral Anomaly Detection</h2>
+          <h2 className="text-slate-900 dark:text-white font-semibold text-lg">Behavioral Anomaly Detection</h2>
           <p className="text-slate-500 text-sm mt-0.5">
             Z-score spike · lateral velocity · auth burst · off-hours privilege
           </p>
@@ -139,7 +139,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
       )}
 
       {!report && !loading && (
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
           <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-2">
             <svg className="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -163,7 +163,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
               { label: 'Window', value: `${report.analysis_window_hours.toFixed(1)}h`, color: '#00F0FF' },
               { label: 'Highest Severity', value: report.highest_severity.toUpperCase(), color: sevStatColor[report.highest_severity] ?? '#64748b' },
             ].map(s => (
-              <div key={s.label} className="bg-slate-900 rounded-xl p-4 border border-slate-800">
+              <div key={s.label} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-800">
                 <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">{s.label}</p>
                 <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}</p>
               </div>
@@ -171,7 +171,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
           </div>
 
           {report.anomalies.length === 0 ? (
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 flex flex-col items-center gap-2">
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex flex-col items-center gap-2">
               <div
                 className="w-10 h-10 rounded-full flex items-center justify-center mb-1 border"
                 style={{ background: '#00F0FF15', borderColor: '#00F0FF30' }}

@@ -239,25 +239,31 @@ def _mitre_html(techniques: list) -> str:
     return _sec("MITRE ATT&amp;CK Techniques", f'<div class="mgrid">{tags}</div>')
 
 
-def _ioc_html(iocs: list) -> str:
+def _ioc_html(iocs: list, limit: int = 60) -> str:
     if not iocs:
         return ""
+    shown = iocs[:limit]
     rows = "".join(
         f'<tr><td><span class="tbadge">{i.type}</span></td>'
         f'<td style="font-family:monospace">{i.value}</td>'
         f'<td style="color:#94a3b8;word-break:normal">{i.context[:80]}</td></tr>'
-        for i in iocs[:60]
+        for i in shown
     )
     table = (
         '<table><thead><tr><th>Type</th><th>Value</th><th>Context</th></tr></thead>'
         f'<tbody>{rows}</tbody></table>'
     )
-    return _sec(f"Indicators of Compromise ({len(iocs)} total)", table)
+    title = (
+        f"Indicators of Compromise (top {limit} of {len(iocs)})"
+        if len(iocs) > limit else
+        f"Indicators of Compromise ({len(iocs)} total)"
+    )
+    return _sec(title, table)
 
 
 # ── NEW: Suspicious-events section (replaces flat 100-event table) ─────────────
 
-def _suspicious_events_html(events: list[ForensicEvent], result: RCAResult) -> str:
+def _suspicious_events_html(events: list[ForensicEvent], result: RCAResult, limit: int = 50) -> str:
     """
     Evidence-focused event section — only events that match a known attack
     pattern are shown, colour-coded by severity with a detection label.
@@ -297,13 +303,13 @@ def _suspicious_events_html(events: list[ForensicEvent], result: RCAResult) -> s
 
     # Sort: most severe first, then chronological within same severity
     flagged.sort(key=lambda x: (_SEVERITY_RANK.get(x[2], 3), x[0].timestamp))
-    capped = flagged[:50]
+    capped = flagged[:limit]
 
     red_c    = sum(1 for _, _, c in capped if c == "red")
     orange_c = sum(1 for _, _, c in capped if c == "orange")
     amber_c  = sum(1 for _, _, c in capped if c == "amber")
 
-    cap_note = f" — showing top 50 of {sus_count}" if sus_count > 50 else ""
+    cap_note = f" — showing top {limit} of {sus_count}" if sus_count > limit else ""
     sev_badges = (
         (f'<span style="padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700;'
          f'background:#fef2f2;color:#dc2626;border:1px solid #fecaca">{red_c} CRITICAL</span> '
@@ -371,7 +377,7 @@ def _suspicious_events_html(events: list[ForensicEvent], result: RCAResult) -> s
         f'<tbody>{"".join(rows)}</tbody></table>'
     )
 
-    return _sec(f"Suspicious Events ({sus_count} of {total:,} flagged{cap_note})", summary + table)
+    return _sec(f"Suspicious Events ({sus_count} of {total:,} flagged{cap_note})", summary + table)  # noqa
 
 
 # ── NEW: ATT&CK kill-chain coverage visualization ──────────────────────────────
@@ -583,7 +589,7 @@ _TACTIC_BASE_REC: dict[str, str] = {
 }
 
 
-def _dynamic_remediation_html(result: RCAResult, events: list[ForensicEvent]) -> str:
+def _dynamic_remediation_html(result: RCAResult, events: list[ForensicEvent], tier1_only: bool = False) -> str:
     """
     Two-tier, evidence-aware remediation plan.
 
@@ -815,7 +821,7 @@ def _dynamic_remediation_html(result: RCAResult, events: list[ForensicEvent]) ->
         )
 
     hardening_html = ""
-    if rec_items:
+    if rec_items and not tier1_only:
         hardening_html = (
             '<div>'
             '<h3 style="font-size:11px;font-weight:700;text-transform:uppercase;'
@@ -905,8 +911,9 @@ def _exec_summary_html(result: RCAResult, events: list[ForensicEvent],
 def _detection_rules_html(result: RCAResult) -> str:
     sigma_rules = rules_mod.generate_sigma_rules(result.iocs, result.mitre_techniques)
     snort_rules = rules_mod.generate_snort_rules(result.iocs)
+    yara_rules  = rules_mod.generate_yara_rules(result.iocs, result.mitre_techniques)
 
-    if not sigma_rules and not snort_rules:
+    if not sigma_rules and not snort_rules and not yara_rules:
         return ""
 
     sigma_entries = ""
@@ -925,11 +932,21 @@ def _detection_rules_html(result: RCAResult) -> str:
         f'<div class="snort-rule">{rule}</div>' for rule in snort_rules[:10]
     )
 
+    yara_entries = "".join(
+        f'<div class="rule-entry">{rule}</div>' for rule in yara_rules[:10]
+    )
+
     _sigma_fallback = '<p style="color:#64748b;font-size:12px">No Sigma rules generated.</p>'
     _snort_fallback = '<p style="color:#64748b;font-size:12px">No IP-based IOCs — no Snort rules.</p>'
+    _yara_fallback  = '<p style="color:#64748b;font-size:12px">No YARA rules generated.</p>'
     sigma_col = (
         f'<div class="rule-block"><h4>Sigma Rules ({len(sigma_rules)} generated)</h4>'
         f'{sigma_entries or _sigma_fallback}'
+        f'</div>'
+    )
+    yara_col = (
+        f'<div class="rule-block"><h4>YARA Rules ({len(yara_rules)} generated)</h4>'
+        f'{yara_entries or _yara_fallback}'
         f'</div>'
     )
     snort_col = (
@@ -939,8 +956,8 @@ def _detection_rules_html(result: RCAResult) -> str:
     )
 
     return _sec(
-        f"Detection Rules — Sigma ({len(sigma_rules)}) &amp; Snort ({len(snort_rules)})",
-        f'<div class="rules-wrap">{sigma_col}{snort_col}</div>',
+        f"Detection Rules — Sigma ({len(sigma_rules)}) · YARA ({len(yara_rules)}) · Snort ({len(snort_rules)})",
+        f'<div class="rules-wrap">{sigma_col}{yara_col}{snort_col}</div>',
     )
 
 
@@ -1590,17 +1607,9 @@ def generate_case_report(
     # ── 11. Investigation Narrative ────────────────────────────────────────────
     narrative_section = ""
     if result.narrative and result.windows_analyzed > 0:
+        narr_preview = result.narrative[:600] + ("…" if len(result.narrative) > 600 else "")
         narrative_section = _sec("Investigation Narrative (AI-Assisted)", f"""
-<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 14px;margin-bottom:12px">
-  <p style="font-size:11px;color:#92400e">
-    <strong>AI NARRATIVE NOTICE:</strong> The following narrative was generated by a local
-    large language model (LLM) running on-premises. It is an analytical aid derived from
-    the underlying event data and should be reviewed by a qualified forensic examiner before
-    submission in legal proceedings. All cited sentences are mapped to specific source event IDs
-    to enable independent verification.
-  </p>
-</div>
-<p class="narr">{result.narrative}</p>""", ai=True)
+<p class="narr">{narr_preview}</p>""", ai=True)
 
     # ── 12. Event Activity Timeline ────────────────────────────────────────────
     density_svg = _event_density_chart_svg(events)
@@ -1620,11 +1629,8 @@ def generate_case_report(
     # ── 14. Pivot Chain ────────────────────────────────────────────────────────
     pivot = _pivot_html(result.pivot_chain)
 
-    # ── 15. Anomalous Events ────────────────────────────────────────────────────
-    anomalous = _anomalous_html(result.anomalous_events)
-
     # ── 16. Suspicious Events (evidence table) ─────────────────────────────────
-    suspicious_events = _suspicious_events_html(events, result)
+    suspicious_events = _suspicious_events_html(events, result, limit=15)
 
     # ── 17. MITRE ATT&CK Techniques ────────────────────────────────────────────
     mitre = _mitre_html(result.mitre_techniques)
@@ -1632,50 +1638,15 @@ def generate_case_report(
     # ── 18. ML Entity Behavior Analysis ────────────────────────────────────────
     ml_svg = _ml_anomaly_chart_svg(result.ml_anomaly_scores or [])
     ml_section = ""
-    if ml_svg or result.ml_anomaly_scores:
-        ml_rows = ""
-        for s in sorted(result.ml_anomaly_scores or [], key=lambda x: x.anomaly_score, reverse=True)[:30]:
-            risk_color = {"high_risk": "#dc2626", "suspicious": "#d97706", "normal": "#16a34a"}.get(s.risk_level, "#64748b")
-            risk_label = {"high_risk": "HIGH RISK", "suspicious": "SUSPICIOUS", "normal": "NORMAL"}.get(s.risk_level, s.risk_level.upper())
-            conf_note  = " (heuristic)" if s.confidence == "insufficient_data" else f" ({s.confidence} confidence)"
-            factors    = ", ".join(s.contributing_factors) if s.contributing_factors else "—"
-            ml_rows += (
-                f'<tr>'
-                f'<td style="font-family:monospace">{s.entity}</td>'
-                f'<td style="font-weight:700;color:{risk_color}">{risk_label}</td>'
-                f'<td>{int(s.anomaly_score * 100)}%{conf_note}</td>'
-                f'<td>{s.session_event_count:,}</td>'
-                f'<td style="font-size:11px">{factors}</td>'
-                f'</tr>'
-            )
-        chart_html = f'<div class="chart-wrap">{ml_svg}</div>' if ml_svg else ""
-        table_html = (
-            f'<table style="margin-top:16px"><thead><tr>'
-            f'<th>Entity</th><th>Risk Level</th><th>Anomaly Score</th>'
-            f'<th>Events</th><th>Contributing Factors</th>'
-            f'</tr></thead><tbody>{ml_rows}</tbody></table>'
-            if ml_rows else ""
-        )
-        ml_section = _sec("ML Entity Behavior Analysis", f"""
-<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:10px 14px;margin-bottom:12px">
-  <p style="font-size:11px;color:#0369a1">
-    Anomaly scores are derived from an Isolation Forest model trained on baseline behavioural
-    profiles. Scores represent statistical deviation from normal activity — they are risk
-    indicators, not definitive evidence of compromise. HIGH RISK entities require further
-    manual investigation. Heuristic scores are calculated by rule-based fallback when the
-    trained model has insufficient data for a given entity.
-  </p>
-</div>
-{chart_html}{table_html}""")
+    if ml_svg:
+        ml_section = _sec("ML Behavioral Anomaly Scores",
+                          f'<div class="chart-wrap">{ml_svg}</div>')
 
     # ── 19. IOCs ────────────────────────────────────────────────────────────────
-    iocs = _ioc_html(result.iocs)
-
-    # ── 20. Detection Rules ────────────────────────────────────────────────────
-    detection_rules = _detection_rules_html(result)
+    iocs = _ioc_html(result.iocs, limit=15)
 
     # ── 21. Remediation Plan ────────────────────────────────────────────────────
-    remediation = _dynamic_remediation_html(result, events)
+    remediation = _dynamic_remediation_html(result, events, tier1_only=True)
 
     # ── 22. Evidence Manifest / Chain of Custody ───────────────────────────────
     evidence_html = ""
@@ -1756,29 +1727,13 @@ def generate_case_report(
         result.attack_classification.primary_attack.replace("_", " ").title()
         if result.attack_classification else "undetermined"
     )
-    confidence_note = (
-        f"The analysis was conducted across {result.windows_analyzed} analysis window(s) "
-        f"with a multi-window consensus of {int(result.consensus_agreement * 100)}%."
-        if result.windows_analyzed > 0 and result.consensus_agreement is not None
-        else "The analysis used deterministic methods (Quick Scan mode) without LLM narrative generation."
-    )
     conclusions = _sec("Conclusions", f"""
 <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;padding:16px 20px">
-  <p style="font-size:13px;color:#374151;line-height:1.8">
-    Based on the automated forensic analysis of {result.analyzed_event_count:,} log events
-    spanning {t_start} to {t_end} UTC, the following conclusions are drawn:
-  </p>
-  <ol style="margin:12px 0 0 20px;font-size:13px;color:#374151;line-height:2">
-    <li>A security incident of <strong>{sev.lower()} severity</strong> (score: {result.severity_score}/100) was
-    detected, classified as <strong>{attack_type_str}</strong> with{
-        f" {int(result.attack_classification.confidence * 100)}% classifier confidence"
-        if result.attack_classification else " no classification confidence data available"
-    }.</li>
-    <li>{'Patient-zero candidate identified as: <strong>' + result.patient_zero_candidate + '</strong>.' if result.patient_zero_candidate else 'Patient-zero was not positively identified from the available evidence.'}</li>
-    <li>{'Initial access vector identified as: <strong>' + result.initial_access_vector + '</strong>.' if result.initial_access_vector else 'Initial access vector could not be positively determined from the available evidence.'}</li>
-    <li>{len(result.mitre_techniques)} MITRE ATT&amp;CK technique(s) were mapped across {len({t.tactic for t in result.mitre_techniques})} tactic(s), providing a structured kill-chain characterisation of the adversary behaviour.</li>
-    <li>{len(result.iocs)} indicator(s) of compromise were extracted for use in threat intelligence feeds and defensive blocking actions.</li>
-    <li>{confidence_note}</li>
+  <ol style="margin:0 0 0 20px;font-size:13px;color:#374151;line-height:2">
+    <li>Incident of <strong>{sev.lower()} severity</strong> ({result.severity_score}/100), classified as <strong>{attack_type_str}</strong>.</li>
+    <li>{'Patient-zero: <strong>' + result.patient_zero_candidate + '</strong>.' if result.patient_zero_candidate else 'Patient-zero not positively identified.'}</li>
+    <li>{'Initial access: <strong>' + result.initial_access_vector + '</strong>.' if result.initial_access_vector else 'Initial access vector undetermined.'}</li>
+    <li>{len(result.mitre_techniques)} ATT&amp;CK technique(s) across {len({t.tactic for t in result.mitre_techniques})} tactic(s). {len(result.iocs)} IOC(s) extracted.</li>
   </ol>
 </div>""")
 
@@ -1833,33 +1788,16 @@ def generate_case_report(
 </div>""")
 
     # ── 27. Signature Block ────────────────────────────────────────────────────────
-    signature_block = _sec("Certification and Signature", f"""
-<div style="margin-top:8px">
-  <p style="font-size:13px;color:#374151;line-height:1.7">
-    This report was prepared and certified by the examiner identified below. By issuing this
-    report, the examiner certifies that the analysis was conducted in good faith using the tools
-    and methodology described herein, and that the findings accurately represent the output of
-    that analysis to the best of their professional knowledge.
-  </p>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;margin-top:24px">
-    <div>
-      <p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:6px">Examining Analyst</p>
-      <div style="border-bottom:1px solid #374151;height:56px;margin-bottom:6px"></div>
-      <p style="font-size:12px;color:#374151">{analyst}</p>
-      <p style="font-size:11px;color:#64748b">Digital Forensics Examiner</p>
-    </div>
-    <div>
-      <p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:6px">Date of Certification</p>
-      <div style="border-bottom:1px solid #374151;height:56px;margin-bottom:6px"></div>
-      <p style="font-size:12px;color:#374151">{now_date}</p>
-      <p style="font-size:11px;color:#64748b">Report Reference: {report_ref}</p>
-    </div>
+    signature_block = _sec("Certification", f"""
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+  <div style="border:1px solid #e2e8f0;border-radius:6px;padding:14px">
+    <p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px">Examiner</p>
+    <p style="font-size:14px;color:#1e293b">{analyst}</p>
   </div>
-  <div style="margin-top:24px;padding:10px 14px;border:1px solid #e2e8f0;border-radius:6px;background:#f8fafc">
-    <p style="font-size:11px;color:#64748b">
-      Report generated by <strong>LateralX Forensic Intelligence Platform (FIP)</strong> &bull;
-      {now} &bull; Reference: {report_ref}
-    </p>
+  <div style="border:1px solid #e2e8f0;border-radius:6px;padding:14px">
+    <p style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:#94a3b8;margin-bottom:4px">Report Reference</p>
+    <p style="font-size:14px;font-family:monospace;color:#1e293b">{report_ref}</p>
+    <p style="font-size:11px;color:#64748b">{now}</p>
   </div>
 </div>""")
 
@@ -1872,32 +1810,22 @@ def generate_case_report(
 
     body = (
         cover
-        + doc_control
         + case_particulars
-        + examiner_decl
-        + scope_section
-        + method_section
-        + tool_registry
         + exec_summary
         + gauge_section
-        + entity_section
         + rca_section
         + narrative_section
         + density_section
         + kill_chain
         + pivot
-        + anomalous
         + suspicious_events
         + mitre
         + ml_section
         + iocs
-        + detection_rules
         + remediation
         + evidence_html
         + notes_html
         + conclusions
-        + limitations
-        + legal_disclaimer
         + signature_block
         + footer
     )

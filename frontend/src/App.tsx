@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+﻿import { useState, useEffect, useCallback, useRef } from 'react'
 import { api, isAuthenticated, clearToken, getStoredUser } from './api/client'
 import Login from './components/Login'
 import UploadPanel from './components/UploadPanel'
@@ -11,8 +11,7 @@ import CaseDashboard from './components/CaseDashboard'
 import GlobalSearch from './components/GlobalSearch'
 import TotpSetupModal from './components/TotpSetupModal'
 import StorylinePanel from './components/StorylinePanel'
-import LMDPanel from './components/LMDPanel'
-import ModelQualityPanel from './components/ModelQualityPanel'
+import ADIntelPanel from './components/ADIntelPanel'
 import type {
   ForensicEvent, EventSummary, RCAResult, GraphData, UploadResponse,
   BaselineComparisonResult, MLModelStatus, MLStats, Upload,
@@ -20,12 +19,13 @@ import type {
 
 type Section =
   | 'ingest' | 'cases' | 'timeline' | 'graph'
-  | 'analysis' | 'storyline' | 'lmd'
-  | 'benchmark' | 'ml-settings'
+  | 'analysis' | 'storyline'
+  | 'ad-intel'
+  | 'ml-settings'
 
 type MfaPendingAction = 'train' | 'seed-and-train' | null
 
-// ── Sidebar nav item ───────────────────────────────────────────────────────────
+// ── Sidebar nav item ──────────────────────────────────────────────────────────
 
 function NavItem({
   id, label, active, badge, onClick, icon,
@@ -36,27 +36,53 @@ function NavItem({
   return (
     <button
       onClick={() => onClick(id)}
-      className="w-full flex items-center gap-3 py-2 pr-3 rounded-lg text-sm font-medium transition-all text-left"
-      style={active ? {
-        background: '#00F0FF12',
-        color: '#00F0FF',
-        borderLeft: '2px solid #00F0FF',
-        paddingLeft: '10px',
-      } : {
-        color: '#94a3b8',
-        paddingLeft: '12px',
-      }}
-      onMouseEnter={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#e2e8f0' }}
-      onMouseLeave={e => { if (!active) (e.currentTarget as HTMLButtonElement).style.color = '#94a3b8' }}
+      className={`w-full flex items-center gap-2.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all text-left group ${
+        active
+          ? 'text-[#00F0FF] bg-[#00F0FF]/[0.08]'
+          : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
+      }`}
     >
-      <span className="flex-shrink-0 w-4 h-4">{icon}</span>
+      <span className="flex-shrink-0 w-3.5 h-3.5">{icon}</span>
       <span className="flex-1 truncate">{label}</span>
       {badge && (
-        <span className="text-xs px-1.5 py-0.5 rounded bg-slate-700 text-slate-400 font-mono flex-shrink-0">
+        <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-400 font-mono flex-shrink-0 tabular-nums">
           {badge}
         </span>
       )}
     </button>
+  )
+}
+
+// ── Phase group (numbered workflow step) ───────────────────────────────────────
+
+function PhaseGroup({
+  number, label, color, active, children,
+}: {
+  number: number; label: string; color: string; active: boolean; children: React.ReactNode
+}) {
+  return (
+    <div
+      className={`relative rounded-lg transition-all ${active ? 'bg-slate-50 dark:bg-slate-800/30' : ''}`}
+      style={{ borderLeft: `2px solid ${active ? color : 'transparent'}` }}
+    >
+      <div className="px-2 pt-2.5 pb-1 flex items-center gap-2">
+        <span
+          className="w-[18px] h-[18px] rounded text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-colors"
+          style={{ background: color + '20', color: active ? color : '' }}
+        >
+          {number}
+        </span>
+        <span
+          className={`text-[9px] font-bold uppercase tracking-widest transition-colors ${active ? '' : 'text-slate-400 dark:text-slate-600'}`}
+          style={active ? { color } : undefined}
+        >
+          {label}
+        </span>
+      </div>
+      <div className="space-y-0.5 pb-2">
+        {children}
+      </div>
+    </div>
   )
 }
 
@@ -74,6 +100,21 @@ const Icon = ({ d, d2 }: { d: string; d2?: string }) => (
 export default function App() {
   const [authed, setAuthed]           = useState(() => isAuthenticated())
   const [currentUser, setCurrentUser] = useState(() => getStoredUser())
+  const [darkMode, setDarkMode]       = useState(() => localStorage.getItem('lx_theme') !== 'light')
+
+  const toggleTheme = useCallback(() => {
+    setDarkMode(d => {
+      const next = !d
+      if (next) {
+        document.documentElement.classList.add('dark')
+        localStorage.setItem('lx_theme', 'dark')
+      } else {
+        document.documentElement.classList.remove('dark')
+        localStorage.setItem('lx_theme', 'light')
+      }
+      return next
+    })
+  }, [])
 
   const [summary,          setSummary]          = useState<EventSummary | null>(null)
   const [events,           setEvents]           = useState<ForensicEvent[]>([])
@@ -85,7 +126,7 @@ export default function App() {
   const [baselineLoading,  setBaselineLoading]  = useState(false)
   const [baselineResult,   setBaselineResult]   = useState<BaselineComparisonResult | null>(null)
   const [activeSection,    setActiveSectionRaw] = useState<Section>(() =>
-    (sessionStorage.getItem('fip_section') as Section | null) ?? 'ingest'
+    (sessionStorage.getItem('lx_section') as Section | null) ?? 'ingest'
   )
   const [error,            setError]            = useState<string | null>(null)
   const [knownIocMatches,  setKnownIocMatches]  = useState<string[]>([])
@@ -98,7 +139,7 @@ export default function App() {
   const [mlStats,          setMlStats]          = useState<MLStats | null>(null)
   const [mlStatsLoading,   setMlStatsLoading]   = useState(false)
   const [activeCaseId,     setActiveCaseIdRaw]  = useState<string | null>(() =>
-    sessionStorage.getItem('fip_case') || null
+    sessionStorage.getItem('lx_case') || null
   )
   const [uploadKey,            setUploadKey]            = useState(0)
   const [caseUploads,          setCaseUploads]          = useState<Upload[]>([])
@@ -115,13 +156,13 @@ export default function App() {
   noiseFilterRef.current = noiseFilter
 
   const switchSection = useCallback((s: Section) => {
-    sessionStorage.setItem('fip_section', s)
+    sessionStorage.setItem('lx_section', s)
     setActiveSectionRaw(s)
   }, [])
 
   const setActiveCaseId = useCallback((id: string | null) => {
-    if (id) sessionStorage.setItem('fip_case', id)
-    else sessionStorage.removeItem('fip_case')
+    if (id) sessionStorage.setItem('lx_case', id)
+    else sessionStorage.removeItem('lx_case')
     setActiveCaseIdRaw(id)
   }, [])
 
@@ -323,15 +364,14 @@ useEffect(() => {
     analysis: <Icon d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />,
     cases: <Icon d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />,
     storyline: <Icon d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />,
-    lmd:      <Icon d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />,
-    benchmark: <Icon d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />,
+    'ad-intel': <Icon d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />,
     'ml-settings': <Icon d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
   }
 
   const evtCount = summary?.total ?? 0
 
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden">
+    <div className="flex h-screen bg-slate-100 dark:bg-gray-950 overflow-hidden">
       {/* ── Overlay modals ──────────────────────────────────────────────────── */}
       {showTotpSetup && <TotpSetupModal onClose={() => setShowTotpSetup(false)} />}
       {mfaPending && (
@@ -343,78 +383,104 @@ useEffect(() => {
       )}
 
       {/* ── Sidebar ─────────────────────────────────────────────────────────── */}
-      <aside className="w-56 flex-shrink-0 flex flex-col bg-slate-900 border-r border-slate-800">
+      <aside className="w-56 flex-shrink-0 flex flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800">
         {/* Logo */}
-        <div className="px-4 py-5 border-b border-slate-800 flex-shrink-0">
+        <div className="px-4 py-5 border-b border-slate-200 dark:border-slate-800 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div
               className="w-7 h-7 rounded-md flex items-center justify-center font-black text-slate-900 text-xs flex-shrink-0"
               style={{ background: '#00F0FF' }}
             >
-              FIP
+              LX
             </div>
-            <span className="text-white font-bold tracking-tight">FIP Platform</span>
+            <span className="text-slate-900 dark:text-white font-bold tracking-tight">LateralX</span>
           </div>
         </div>
 
-        {/* Nav */}
-        <nav className="flex-1 px-2 py-4 space-y-0.5 overflow-y-auto">
-          <p className="px-3 pb-1 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            Evidence &amp; Cases
-          </p>
-          <NavItem id="ingest" label="Data Ingestion" active={activeSection === 'ingest'} onClick={switchSection} icon={nav.ingest} />
-          <NavItem id="cases"  label="Cases"          active={activeSection === 'cases'}  onClick={switchSection} icon={nav.cases} />
+        {/* Nav — 4-phase workflow */}
+        <nav className="flex-1 px-2 py-3 space-y-1 overflow-y-auto">
+          <PhaseGroup
+            number={1} label="Collect" color="#3b82f6"
+            active={activeSection === 'ingest' || activeSection === 'cases'}
+          >
+            <NavItem id="ingest" label="Data Ingestion" active={activeSection === 'ingest'} onClick={switchSection} icon={nav.ingest} />
+            <NavItem id="cases"  label="Cases"          active={activeSection === 'cases'}  onClick={switchSection} icon={nav.cases}  />
+          </PhaseGroup>
 
-          <p className="px-3 pt-4 pb-1 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            Investigation
-          </p>
-          <NavItem id="timeline" label="Timeline"     active={activeSection === 'timeline'} onClick={switchSection} icon={nav.timeline} badge={evtCount > 0 ? String(evtCount) : undefined} />
-          <NavItem id="graph"    label="Attack Graph" active={activeSection === 'graph'}    onClick={switchSection} icon={nav.graph} />
+          <PhaseGroup
+            number={2} label="Explore" color="#10b981"
+            active={activeSection === 'timeline' || activeSection === 'graph'}
+          >
+            <NavItem id="timeline" label="Timeline"     active={activeSection === 'timeline'} onClick={switchSection} icon={nav.timeline} badge={evtCount > 0 ? String(evtCount) : undefined} />
+            <NavItem id="graph"    label="Attack Graph" active={activeSection === 'graph'}    onClick={switchSection} icon={nav.graph} />
+          </PhaseGroup>
 
-          <p className="px-3 pt-4 pb-1 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            Analysis
-          </p>
-          <NavItem id="analysis"  label="AI Analysis"      active={activeSection === 'analysis'}  onClick={switchSection} icon={nav.analysis} />
-          <NavItem id="storyline" label="Attack Storyline" active={activeSection === 'storyline'} onClick={switchSection} icon={nav.storyline} />
-          <NavItem id="lmd"       label="LMD Analysis"     active={activeSection === 'lmd'}       onClick={switchSection} icon={nav.lmd} />
+          <PhaseGroup
+            number={3} label="Analyze" color="#8b5cf6"
+            active={activeSection === 'analysis' || activeSection === 'storyline'}
+          >
+            <NavItem id="analysis"  label="AI Analysis"      active={activeSection === 'analysis'}  onClick={switchSection} icon={nav.analysis}  />
+            <NavItem id="storyline" label="Attack Storyline" active={activeSection === 'storyline'} onClick={switchSection} icon={nav.storyline} />
+          </PhaseGroup>
 
-          <p className="px-3 pt-4 pb-1 text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            Models
-          </p>
-          <NavItem id="benchmark"   label="Model Quality"  active={activeSection === 'benchmark'}   onClick={switchSection} icon={nav.benchmark} />
-          <NavItem id="ml-settings" label="Model Settings" active={activeSection === 'ml-settings'} onClick={switchSection} icon={nav['ml-settings']} />
+          <PhaseGroup
+            number={4} label="AD Intelligence" color="#f97316"
+            active={activeSection === 'ad-intel'}
+          >
+            <NavItem id="ad-intel" label="AD Intelligence" active={activeSection === 'ad-intel'} onClick={switchSection} icon={nav['ad-intel']} />
+          </PhaseGroup>
         </nav>
 
         {/* User footer */}
-        <div className="px-3 py-3 border-t border-slate-800 flex-shrink-0 space-y-1">
+        <div className="px-3 py-3 border-t border-slate-200 dark:border-slate-800 flex-shrink-0 space-y-1">
           {activeCaseId && (
             <div className="flex items-center justify-between px-1 py-1 mb-1">
               <span className="text-xs text-slate-500 truncate">Case active</span>
               <button
                 onClick={() => setActiveCaseId(null)}
-                className="text-xs text-slate-600 hover:text-slate-400 ml-2 flex-shrink-0"
+                className="text-xs text-slate-500 hover:text-slate-700 dark:text-slate-600 dark:hover:text-slate-400 ml-2 flex-shrink-0"
               >
                 ✕
               </button>
             </div>
           )}
-          <div className="flex items-center gap-2 px-1">
+          <div className="flex items-center gap-1.5 px-1">
             <div className="flex-1 min-w-0">
-              <p className="text-white text-xs font-medium truncate">{currentUser?.username ?? 'analyst'}</p>
-              <p className="text-slate-600 text-xs capitalize">{currentUser?.role ?? 'analyst'}</p>
+              <p className="text-slate-900 dark:text-white text-xs font-medium truncate">{currentUser?.username ?? 'analyst'}</p>
+              <p className="text-slate-500 text-[10px] capitalize">{currentUser?.role ?? 'analyst'}</p>
             </div>
+            {/* Model Settings gear */}
+            <button
+              onClick={() => switchSection('ml-settings')}
+              title="Model Settings"
+              className={`text-xs px-1.5 py-1 rounded border transition-colors flex-shrink-0 ${
+                activeSection === 'ml-settings'
+                  ? 'border-[#00F0FF]/50 text-[#00F0FF]'
+                  : 'border-slate-300 dark:border-slate-700 text-slate-500 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+              }`}
+            >
+              ⚙
+            </button>
+            {/* Theme toggle */}
+            <button
+              onClick={toggleTheme}
+              title={darkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+              className="text-xs px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
+            >
+              {darkMode ? '☀' : '☾'}
+            </button>
             {currentUser?.role === 'admin' && (
               <button
                 onClick={() => setShowTotpSetup(true)}
-                className="text-xs px-1.5 py-1 rounded border border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300 transition-colors"
+                className="text-xs px-1.5 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
                 title="TOTP Setup"
               >
-                TOTP
+                2FA
               </button>
             )}
             <button
               onClick={handleLogout}
-              className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300 transition-colors"
+              className="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-500 hover:border-slate-400 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors flex-shrink-0"
             >
               Out
             </button>
@@ -425,7 +491,7 @@ useEffect(() => {
       {/* ── Main area ───────────────────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="h-14 flex items-center px-5 gap-4 bg-slate-900/60 border-b border-slate-800 flex-shrink-0">
+        <header className="h-14 flex items-center px-5 gap-4 bg-white/80 dark:bg-slate-900/60 border-b border-slate-200 dark:border-slate-800 flex-shrink-0 backdrop-blur">
           <GlobalSearch
             onNavigateCase={(caseId) => { setActiveCaseId(caseId); switchSection('cases') }}
           />
@@ -454,13 +520,13 @@ useEffect(() => {
               </div>
             )}
             {relevanceWarning && (
-              <div className="bg-amber-950/40 border border-amber-800/40 text-amber-300 rounded-xl px-4 py-3 text-xs flex items-start gap-2 justify-between">
+              <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/40 text-amber-800 dark:text-amber-300 rounded-xl px-4 py-3 text-xs flex items-start gap-2 justify-between">
                 <span><span className="font-semibold">Relevance warning:</span> {relevanceWarning}</span>
                 <button onClick={() => setRelevanceWarning(null)} className="opacity-60 hover:opacity-100 flex-shrink-0">✕</button>
               </div>
             )}
             {error && (
-              <div className="bg-red-950/50 border border-red-800/50 text-red-300 rounded-xl px-4 py-3 text-sm flex items-start justify-between gap-3">
+              <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-sm flex items-start justify-between gap-3">
                 <span>{error}</span>
                 <button onClick={() => setError(null)} className="opacity-60 hover:opacity-100 flex-shrink-0">✕</button>
               </div>
@@ -476,34 +542,34 @@ useEffect(() => {
             {activeSection === 'ingest' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-white font-semibold text-lg mb-1">Data Ingestion</h2>
+                  <h2 className="text-slate-900 dark:text-white font-semibold text-lg mb-1">Data Ingestion</h2>
                   <p className="text-slate-500 text-sm">Upload Windows Event Logs, Sysmon XML, or PCAP files for analysis.</p>
                 </div>
                 <UploadPanel onUploadSuccess={handleUploadSuccess} activeCaseId={activeCaseId} currentSummary={summary} />
                 {baselineResult && (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5">
                     <div className="flex items-center justify-between mb-3">
-                      <h3 className="text-white font-semibold text-sm">Baseline Comparison</h3>
+                      <h3 className="text-slate-900 dark:text-white font-semibold text-sm">Baseline Comparison</h3>
                       <button onClick={() => setBaselineResult(null)} className="text-xs text-slate-600 hover:text-slate-400">Dismiss</button>
                     </div>
-                    <p className="text-slate-300 text-sm mb-3">{baselineResult.summary}</p>
+                    <p className="text-slate-700 dark:text-slate-300 text-sm mb-3">{baselineResult.summary}</p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                       {baselineResult.new_hosts.length > 0 && (
                         <div>
                           <p className="font-semibold text-slate-500 mb-1">New Hosts</p>
-                          {baselineResult.new_hosts.map(h => <p key={h} className="text-slate-300 font-mono">{h}</p>)}
+                          {baselineResult.new_hosts.map(h => <p key={h} className="text-slate-700 dark:text-slate-300 font-mono">{h}</p>)}
                         </div>
                       )}
                       {baselineResult.new_users.length > 0 && (
                         <div>
                           <p className="font-semibold text-slate-500 mb-1">New Users</p>
-                          {baselineResult.new_users.map(u => <p key={u} className="text-slate-300 font-mono">{u}</p>)}
+                          {baselineResult.new_users.map(u => <p key={u} className="text-slate-700 dark:text-slate-300 font-mono">{u}</p>)}
                         </div>
                       )}
                       {baselineResult.anomalous_event_types.length > 0 && (
                         <div>
                           <p className="font-semibold text-slate-500 mb-1">New Event Types</p>
-                          {baselineResult.anomalous_event_types.map(t => <p key={t} className="text-slate-300 font-mono">{t}</p>)}
+                          {baselineResult.anomalous_event_types.map(t => <p key={t} className="text-slate-700 dark:text-slate-300 font-mono">{t}</p>)}
                         </div>
                       )}
                       <div>
@@ -531,7 +597,7 @@ useEffect(() => {
                       className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
                         noiseFilter
                           ? 'text-slate-900 border-transparent'
-                          : 'border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                          : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-300'
                       }`}
                       style={noiseFilter ? { background: '#00F0FF', borderColor: '#00F0FF' } : {}}
                     >
@@ -553,16 +619,14 @@ useEffect(() => {
             {/* Attack Graph ───────────────────────────────────────────────── */}
             {activeSection === 'graph' && (
               <div className="space-y-3">
-                <div className="bg-slate-900 rounded-xl border border-slate-800 px-4 py-3 flex flex-wrap items-center gap-2">
+                <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 px-4 py-3 flex flex-wrap items-center gap-2">
                   {graphUploads.length > 1 && (
                     <>
                       <span className="text-xs font-medium text-slate-500 mr-1">Graph source:</span>
                       <button
                         onClick={() => { setSelectedGraphUploadId(null); refreshGraph(null) }}
-                        className="px-3 py-1 rounded-full text-xs font-medium transition-colors"
-                        style={selectedGraphUploadId === null
-                          ? { background: '#00F0FF', color: '#0f172a' }
-                          : { background: '#1e293b', color: '#94a3b8' }}
+                        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${selectedGraphUploadId === null ? '' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                        style={selectedGraphUploadId === null ? { background: '#00F0FF', color: '#0f172a' } : undefined}
                       >
                         All uploads
                       </button>
@@ -570,10 +634,8 @@ useEffect(() => {
                         <button
                           key={u.id}
                           onClick={() => { setSelectedGraphUploadId(u.id); refreshGraph(u.id) }}
-                          className="px-3 py-1 rounded-full text-xs font-medium transition-colors max-w-[200px] truncate"
-                          style={selectedGraphUploadId === u.id
-                            ? { background: '#00F0FF', color: '#0f172a' }
-                            : { background: '#1e293b', color: '#94a3b8' }}
+                          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors max-w-[200px] truncate ${selectedGraphUploadId === u.id ? '' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                          style={selectedGraphUploadId === u.id ? { background: '#00F0FF', color: '#0f172a' } : undefined}
                           title={`${u.filename} — ${u.event_count.toLocaleString()} events`}
                         >
                           {u.filename.length > 26 ? u.filename.slice(0, 23) + '…' : u.filename}
@@ -584,7 +646,7 @@ useEffect(() => {
                   <div className="ml-auto">
                     <button
                       onClick={() => refreshGraph(selectedGraphUploadId)}
-                      className="text-xs px-3 py-1 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 transition-colors"
+                      className="text-xs px-3 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
                       title="Reload the attack graph from current events"
                     >
                       ↺ Reload Graph
@@ -600,7 +662,7 @@ useEffect(() => {
             )}
 
             {/* AI Analysis ────────────────────────────────────────────────── */}
-            {activeSection === 'analysis' && (
+            <div style={{ display: activeSection === 'analysis' ? undefined : 'none' }}>
               <NarrativePanel
                 result={rca}
                 loading={rcaLoading}
@@ -612,7 +674,7 @@ useEffect(() => {
                 uploads={graphUploads}
                 activeCaseId={activeCaseId}
               />
-            )}
+            </div>
 
             {/* Cases ──────────────────────────────────────────────────────── */}
             {activeSection === 'cases' && (
@@ -620,55 +682,34 @@ useEffect(() => {
             )}
 
             {/* Attack Storyline ───────────────────────────────────────────── */}
-            {activeSection === 'storyline' && (
+            <div style={{ display: activeSection === 'storyline' ? undefined : 'none' }}>
               <StorylinePanel
                 activeCaseId={activeCaseId}
                 selectedUploadId={selectedGraphUploadId}
               />
-            )}
+            </div>
 
-            {/* LMD Analysis ──────────────────────────────────────────────── */}
-            {activeSection === 'lmd' && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-white font-semibold text-lg mb-1">LMD Analysis</h2>
-                  <p className="text-slate-500 text-sm">
-                    AD-specialized Random Forest lateral movement detection — run independently of AI Analysis.
-                  </p>
-                </div>
-                <LMDPanel activeCaseId={activeCaseId} uploads={caseUploads} />
-              </div>
-            )}
-
-            {/* Model Quality Benchmark ───────────────────────────────────── */}
-            {activeSection === 'benchmark' && (
-              <div className="space-y-4">
-                <div>
-                  <h2 className="text-white font-semibold text-lg mb-1">Model Quality</h2>
-                  <p className="text-slate-500 text-sm">
-                    Benchmark all detection models against OTRF/Security-Datasets and MITRE ATT&CK KB v14 ground truth.
-                  </p>
-                </div>
-                <ModelQualityPanel />
-              </div>
-            )}
+            {/* AD Intelligence ────────────────────────────────────────────── */}
+            <div style={{ display: activeSection === 'ad-intel' ? undefined : 'none' }}>
+              <ADIntelPanel activeCaseId={activeCaseId} uploads={graphUploads} />
+            </div>
 
             {/* ML Model Settings ──────────────────────────────────────────── */}
             {activeSection === 'ml-settings' && (
               <div className="space-y-6">
                 <div>
-                  <h2 className="text-white font-semibold text-lg mb-1">Model Settings</h2>
+                  <h2 className="text-slate-900 dark:text-white font-semibold text-lg mb-1">Model Settings</h2>
                   <p className="text-slate-500 text-sm">Isolation Forest anomaly detector — training controls and performance metrics.</p>
                 </div>
 
                 {mlStatus ? (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-5">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-5 space-y-5">
                     {/* Status + training controls */}
                     <div className="flex items-center justify-between flex-wrap gap-3">
                       <div className="flex items-center gap-3">
                         <div className="w-3 h-3 rounded-full flex-shrink-0"
                           style={{ background: mlStatus.trained ? '#00F0FF' : '#475569' }} />
-                        <p className="text-white font-semibold">
+                        <p className="text-slate-900 dark:text-white font-semibold">
                           {mlStatus.trained ? 'Model trained and active' : 'Model not trained'}
                         </p>
                       </div>
@@ -693,7 +734,7 @@ useEffect(() => {
                           <button
                             onClick={handleLoadMlStats}
                             disabled={mlStatsLoading}
-                            className="text-xs px-3 py-1.5 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 disabled:opacity-40 whitespace-nowrap"
+                            className="text-xs px-3 py-1.5 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 whitespace-nowrap"
                             title="Load precision/recall/F1 from analyst verifications"
                           >
                             {mlStatsLoading ? 'Loading…' : 'View Stats'}
@@ -710,16 +751,16 @@ useEffect(() => {
                         { label: 'Synthetic Events', value: mlStatus.synthetic_baseline_events ?? '—' },
                         { label: 'Trained At',       value: mlStatus.trained_at ? mlStatus.trained_at.slice(0, 10) : '—' },
                       ].map(s => (
-                        <div key={s.label} className="bg-slate-800 rounded-xl p-3">
+                        <div key={s.label} className="bg-slate-100 dark:bg-slate-800 rounded-xl p-3">
                           <p className="text-xs text-slate-500 mb-1">{s.label}</p>
-                          <p className="text-white font-semibold text-sm">{String(s.value)}</p>
+                          <p className="text-slate-900 dark:text-white font-semibold text-sm">{String(s.value)}</p>
                         </div>
                       ))}
                     </div>
 
                     {/* ML Stats widget */}
                     {mlStats && (
-                      <div className="bg-slate-800 rounded-lg border border-slate-700 p-4">
+                      <div className="bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-700 p-4">
                         <div className="flex items-center justify-between mb-3">
                           <span className="text-xs font-semibold text-slate-400">Model Performance Metrics</span>
                           <button onClick={() => setMlStats(null)} className="text-xs text-slate-500 hover:text-slate-300">✕</button>
@@ -731,9 +772,9 @@ useEffect(() => {
                             { label: 'F1 Score',  val: mlStats.f1_score },
                             { label: 'Accuracy',  val: mlStats.accuracy },
                           ].map(({ label, val }) => (
-                            <div key={label} className="bg-slate-900 rounded border border-slate-700 p-2">
+                            <div key={label} className="bg-white dark:bg-slate-900 rounded border border-slate-700 p-2">
                               <div className="text-slate-500 text-xs mb-1">{label}</div>
-                              <div className="font-semibold text-slate-200">
+                              <div className="font-semibold text-slate-800 dark:text-slate-200">
                                 {val !== null && val !== undefined ? `${Math.round(val * 100)}%` : '—'}
                               </div>
                             </div>
@@ -746,7 +787,7 @@ useEffect(() => {
                             { label: 'FP', val: mlStats.false_positives, color: 'text-red-400'   },
                             { label: 'FN', val: mlStats.false_negatives, color: 'text-red-400'   },
                           ].map(({ label, val, color }) => (
-                            <div key={label} className="bg-slate-900 rounded border border-slate-700 p-2">
+                            <div key={label} className="bg-white dark:bg-slate-900 rounded border border-slate-700 p-2">
                               <div className="text-slate-500 text-xs mb-1">{label}</div>
                               <div className={`font-semibold ${color}`}>{val}</div>
                             </div>
@@ -765,7 +806,7 @@ useEffect(() => {
                     )}
                   </div>
                 ) : (
-                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-10 flex items-center justify-center">
+                  <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex items-center justify-center">
                     <p className="text-slate-600 text-sm">Loading model status…</p>
                   </div>
                 )}
@@ -785,7 +826,7 @@ function EmptyState({
   icon, message, action, actionLabel,
 }: { icon: string; message: string; action?: () => void; actionLabel?: string }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
+    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
       <svg className="h-12 w-12 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={icon} />
       </svg>

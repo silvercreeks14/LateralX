@@ -53,34 +53,158 @@ TACTIC_ORDER = [
 _EID_TECHNIQUE: dict[str, tuple[str, str, str]] = {
     # (technique_id, name, tactic)
     # 4688/4624/4663 are handled conditionally in _classify() — not here.
-    '4698': ('T1053.005', 'Scheduled Task',                  'Persistence'),
-    '7045': ('T1543.003', 'Windows Service',                  'Persistence'),
-    '4657': ('T1547.001', 'Registry Run Keys',                'Persistence'),
-    '4662': ('T1003.006', 'DCSync',                           'Credential Access'),
-    '4625': ('T1110',     'Brute Force',                      'Credential Access'),
-    '4672': ('T1134',     'Access Token Manipulation',        'Privilege Escalation'),
-    '4769': ('T1558.003', 'Kerberoasting',                    'Credential Access'),
-    '4768': ('T1558.004', 'AS-REP Roasting',                  'Credential Access'),
-    '4771': ('T1558.004', 'Kerberos Pre-Auth Failure',        'Credential Access'),
-    '4776': ('T1550.002', 'NTLM Authentication',              'Lateral Movement'),
-    '4648': ('T1078',     'Explicit Credential Logon',        'Credential Access'),
-    '4728': ('T1098',     'Domain Group Membership Change',   'Persistence'),
-    '4732': ('T1098',     'Local Group Membership Change',    'Persistence'),
-    '4756': ('T1098',     'Universal Group Membership Change','Persistence'),
-    '4720': ('T1136.002', 'Domain Account Created',           'Persistence'),
-    '4726': ('T1531',     'Domain Account Deleted',           'Impact'),
-    '5140': ('T1021.002', 'SMB/Windows Admin Shares',         'Lateral Movement'),
-    '5145': ('T1021.002', 'SMB/Windows Admin Shares',         'Lateral Movement'),
-    '1102': ('T1070.001', 'Clear Windows Event Logs',         'Defense Evasion'),
-    '4719': ('T1562.002', 'Disable Windows Audit Policy',     'Defense Evasion'),
-    '4739': ('T1484.001', 'Domain Policy Modification',       'Defense Evasion'),
+
+    # ── Persistence ──────────────────────────────────────────────────────────
+    '4698': ('T1053.005', 'Scheduled Task',                       'Persistence'),
+    '7045': ('T1543.003', 'Windows Service',                       'Persistence'),
+    '4657': ('T1547.001', 'Registry Run Keys',                     'Persistence'),
+    '4728': ('T1098',     'Domain Group Membership Change',        'Persistence'),
+    '4732': ('T1098',     'Local Group Membership Change',         'Persistence'),
+    '4735': ('T1098',     'Security-Enabled Local Group Modified', 'Persistence'),
+    '4756': ('T1098',     'Universal Group Membership Change',     'Persistence'),
+    '4742': ('T1098',     'Computer Account Modified',             'Persistence'),
+    '4780': ('T1098',     'Admin Account ACL Modified',            'Persistence'),
+    '4794': ('T1098',     'DSRM Password Reset Attempt',          'Persistence'),
+    '4720': ('T1136.002', 'Domain Account Created',                'Persistence'),
+    '5137': ('T1136.002', 'AD Directory Object Created',           'Persistence'),
+
+    # ── Credential Access ─────────────────────────────────────────────────────
+    '4662': ('T1003.006', 'DCSync / DS-Replication',              'Credential Access'),
+    '4929': ('T1003.006', 'DS Replication Source NC Removed',     'Credential Access'),
+    '4625': ('T1110',     'Brute Force',                          'Credential Access'),
+    '4767': ('T1110',     'Account Unlocked After Lockout',       'Credential Access'),
+    '4769': ('T1558.003', 'Kerberoasting',                        'Credential Access'),
+    '4768': ('T1558.004', 'AS-REP Roasting',                      'Credential Access'),
+    '4771': ('T1558.004', 'Kerberos Pre-Auth Failure',            'Credential Access'),
+    '4648': ('T1078',     'Explicit Credential Logon',            'Credential Access'),
+    # AD CS — certificate issuance / template abuse (ESC1-ESC8)
+    '4886': ('T1649',     'Certificate Issued (AD CS)',           'Credential Access'),
+    '4887': ('T1649',     'Certificate Request Approved (AD CS)', 'Credential Access'),
+
+    # ── Privilege Escalation ──────────────────────────────────────────────────
+    '4672': ('T1134',     'Special Privileges Assigned',          'Privilege Escalation'),
+    '4765': ('T1134.005', 'SID-History Injection',                'Privilege Escalation'),
+    '4766': ('T1134.005', 'SID-History Injection Attempt',        'Privilege Escalation'),
+
+    # ── Lateral Movement ──────────────────────────────────────────────────────
+    '4776': ('T1550.002', 'NTLM Authentication',                  'Lateral Movement'),
+    '8004': ('T1550.002', 'NTLM Auth (NTLMSSP)',                  'Lateral Movement'),
+    '5140': ('T1021.002', 'SMB/Windows Admin Shares',             'Lateral Movement'),
+    '5145': ('T1021.002', 'SMB Share File Access',                'Lateral Movement'),
+
+    # ── Defense Evasion ───────────────────────────────────────────────────────
+    '1102': ('T1070.001', 'Clear Windows Event Logs',             'Defense Evasion'),
+    '4719': ('T1562.002', 'Disable Windows Audit Policy',         'Defense Evasion'),
+    '4739': ('T1484.001', 'Domain Policy Modification',           'Defense Evasion'),
+    '4713': ('T1484.001', 'Kerberos Policy Changed',              'Defense Evasion'),
+    '4899': ('T1649',     'Certificate Template Modified (AD CS)','Defense Evasion'),
+    '5136': ('T1484.001', 'AD Directory Object Modified',         'Defense Evasion'),
+
+    # ── Impact ────────────────────────────────────────────────────────────────
+    '4726': ('T1531',     'Domain Account Deleted',               'Impact'),
+    '5141': ('T1531',     'AD Directory Object Deleted',          'Impact'),
 }
 
-# Pattern-based classification (checked first; more specific than EID mapping)
+# Pattern-based classification (checked first; more specific than EID mapping).
+# Ordered: most specific / highest-signal first within each tactic group.
 _PATTERNS: list[tuple[re.Pattern, str, str, str]] = [
-    (re.compile(r'\bwinword\b.*cmd|word.*spawns|macro.*delivery|\.docm\b', re.I),
+
+    # ── Initial Access ────────────────────────────────────────────────────────
+    (re.compile(r'\bwinword\b.*cmd|word.*spawns|macro.*delivery|\.docm\b|\.xlsm\b.*exec|excel.*spawns.*cmd', re.I),
         'T1566.001', 'Spearphishing Attachment', 'Initial Access'),
-    (re.compile(r'\bmimikatz\b|\bsekurlsa\b|\blsadump::(?:sam|dcsync|lsa)\b', re.I),
+    (re.compile(r'\bphish(?:ing)?\b.*(?:link|url|click)|clicked.*(?:link|url)|open.*url.*mail|href.*(?:download|redirect)|malicious.*url.*email', re.I),
+        'T1566.002', 'Spearphishing Link', 'Initial Access'),
+    (re.compile(r'\b(?:teams|slack|discord|telegram|whatsapp)\b.*(?:phish|malicious|link|payload)|social.*engineer.*(?:teams|slack)', re.I),
+        'T1566.003', 'Spearphishing via Service', 'Initial Access'),
+    (re.compile(r'\b(?:log4(?:shell|j)|proxylogon|proxyshell|bluekeep|zerologon|eternalblue|cve-20(?:17-0144|19-0708|20-1472|21-(?:34527|26855|31207|42278|42287)))\b', re.I),
+        'T1190', 'Exploit Public-Facing Application', 'Initial Access'),
+    (re.compile(r'\b(?:vpn|citrix|netscaler|pulse\s*secure|fortinet|globalprotect|anyconnect|sonicwall|juniper)\b.*(?:logon|auth|connect|session)|external.*rdp.*(?:success|logon)|rdp.*from.*(?:internet|wan|public|external)', re.I),
+        'T1133', 'External Remote Services', 'Initial Access'),
+    (re.compile(r'\b(?:usb|removable\s+media|autorun\.inf|autoplay|u3\s+drive|thumb\s*drive|flash\s*drive)\b', re.I),
+        'T1091', 'Replication Through Removable Media', 'Initial Access'),
+    (re.compile(r'\bsupply.*chain|trojanized.*(?:update|package|installer)|malicious.*npm|malicious.*pip|compromised.*software\b', re.I),
+        'T1195.002', 'Compromise Software Supply Chain', 'Initial Access'),
+
+    # ── Execution ─────────────────────────────────────────────────────────────
+    (re.compile(r'\bpowershell\b.*-e(?:nc\b|ncodedcommand)|iex.*downloadstring|invoke-expression|invoke-mimikatz|downloadcradle', re.I),
+        'T1059.001', 'PowerShell', 'Execution'),
+    (re.compile(r'\bcmd(?:\.exe)?\b.*(?:/c\s+|/k\s+)(?:net\b|sc\b|reg\b|wmic\b|certutil\b|curl\b|wget\b)|command.*shell.*exec', re.I),
+        'T1059.003', 'Windows Command Shell', 'Execution'),
+    (re.compile(r'\bwscript\b|\bcscript\b|\.vbs\b.*exec|\.js\b.*wscript|jscript.*shell|vbscript.*run', re.I),
+        'T1059.005', 'Visual Basic / VBScript', 'Execution'),
+    (re.compile(r'\bmshta\b.*(?:http|vbscript|javascript|\.hta\b)|hta.*application.*exec', re.I),
+        'T1218.005', 'Mshta', 'Execution'),
+    (re.compile(r'\bregsvr32\b.*(?:/s\b|scrobj|http|\.sct\b)|squiblydoo', re.I),
+        'T1218.010', 'Regsvr32', 'Execution'),
+    (re.compile(r'\bmsiexec\b.*(?:/q\b|/i\b.*http|/package\b.*http)', re.I),
+        'T1218.007', 'Msiexec', 'Execution'),
+    (re.compile(r'\binstallutil\b.*(?:/logfile|\.exe\b)', re.I),
+        'T1218.004', 'InstallUtil', 'Execution'),
+
+    # ── Persistence ───────────────────────────────────────────────────────────
+    (re.compile(r'\bwmi.*(?:event)?filter\b|\b__eventfilter\b|commandlineeventconsumer', re.I),
+        'T1546.003', 'WMI Event Subscription', 'Persistence'),
+    (re.compile(r'\bbitsadmin\b|bits.*job\b|start-bitstransfer', re.I),
+        'T1197', 'BITS Jobs', 'Persistence'),
+    (re.compile(r'\bsethc\b|image\s+file\s+execution\s+options|accessibility.*debug|debugger.*sethc|utilman.*cmd', re.I),
+        'T1546.008', 'Accessibility Features', 'Persistence'),
+    (re.compile(r'inprocserver32|com.*hijack|clsid.*dll', re.I),
+        'T1546.015', 'COM Hijacking', 'Persistence'),
+    (re.compile(r'\bauthorized_keys\b|ssh.*backdoor|rsa.*pub.*key|ssh.*persistence', re.I),
+        'T1098.004', 'SSH Authorized Keys', 'Persistence'),
+    (re.compile(r'winlogon.*userinitmpr|logon.*script|logon\.bat', re.I),
+        'T1037.001', 'Logon Script', 'Persistence'),
+    (re.compile(r'\bwebshell\b|\.(?:aspx|php|jsp).*(?:cmd|exec|shell|eval)|china\s*chopper|b374k|r57|c99\b', re.I),
+        'T1505.003', 'Web Shell', 'Persistence'),
+    (re.compile(r'\biam\s+create.user\b|createuser.*svc|attachuserpolicy.*administrator', re.I),
+        'T1136.003', 'Cloud Account', 'Persistence'),
+    (re.compile(r'\bapplication\s+shim|sdb.*inject|sdbinst\b|shim.*database', re.I),
+        'T1546.011', 'Application Shimming', 'Persistence'),
+
+    # ── Privilege Escalation ──────────────────────────────────────────────────
+    (re.compile(r'\bzerologon\b|cve-2020-1472|netlogon.*exploit|nl_auth.*empty\s*password', re.I),
+        'T1068', 'ZeroLogon (CVE-2020-1472)', 'Privilege Escalation'),
+    (re.compile(r'\bnopac\b|cve-2021-42278|cve-2021-42287|samaccountname.*spoof', re.I),
+        'T1068', 'noPac (CVE-2021-42278/42287)', 'Privilege Escalation'),
+    (re.compile(r'\bprintnightmare\b|cve-2021-34527|spoolsv.*cmd|print\s+spooler.*exploit', re.I),
+        'T1068', 'PrintNightmare (CVE-2021-34527)', 'Privilege Escalation'),
+    (re.compile(r'\bjuicypotato\b|\brottenpotato\b|\bsweetpotato\b|\bgodpotato\b|seimpersonatepriv', re.I),
+        'T1134.002', 'Create Process with Token', 'Privilege Escalation'),
+    (re.compile(r'\bfodhelper\b|ms-settings.*shell.*open.*command|uac.*bypass|bypass.*uac|eventvwr.*bypass', re.I),
+        'T1548.002', 'Bypass User Account Control', 'Privilege Escalation'),
+    (re.compile(r'\balwaysinstallelevated\b|malicious.*msi|msi.*elevated', re.I),
+        'T1548.002', 'Bypass User Account Control', 'Privilege Escalation'),
+    (re.compile(r'\bunquoted.*service\b|service.*path.*unquoted', re.I),
+        'T1574.009', 'Unquoted Service Path', 'Privilege Escalation'),
+    (re.compile(r'\bsid.*history\b|add.*sid.*history|inject.*sid|sidhistory', re.I),
+        'T1134.005', 'SID-History Injection', 'Privilege Escalation'),
+    (re.compile(r'\bdll.*hijack|dll.*side.?load|missing.*dll.*search|phantom.*dll', re.I),
+        'T1574.001', 'DLL Search Order Hijacking', 'Privilege Escalation'),
+
+    # ── Defense Evasion ───────────────────────────────────────────────────────
+    (re.compile(r'\bskeleton[-_\s]key\b|misc::skeleton|patching.*lsass|lsass.*patch', re.I),
+        'T1207', 'Rogue Domain Controller', 'Defense Evasion'),
+    (re.compile(r'\bmsse-\d+|createremotethread|reflective.*inject|pipe.*created', re.I),
+        'T1055', 'Process Injection', 'Defense Evasion'),
+    (re.compile(r'\bamsi\b|amsiutils|invoke-obfuscat|etw.*bypass|amsi\.dll|clm.*bypass|constrained.*language.*bypass', re.I),
+        'T1562.001', 'Disable or Modify Tools', 'Defense Evasion'),
+    (re.compile(r'\bwevtutil\s+cl\b|event.*log.*cleared|clearev\b', re.I),
+        'T1070.001', 'Clear Windows Event Logs', 'Defense Evasion'),
+    (re.compile(r'\bdel\b.*\.(?:log|evtx|etl)\b|rm\s+-[rf]+.*\.log|remove.*log.*file|forfiles.*delete.*log', re.I),
+        'T1070.004', 'File Deletion', 'Defense Evasion'),
+    (re.compile(r'\btimestomp\b|touch\s+-[amt]\b|set-item.*last.*write|modify.*timestamp', re.I),
+        'T1070.006', 'Timestomp', 'Defense Evasion'),
+    (re.compile(r'\breg\s+(?:add|delete|import)\b|regini\b|set-itemproperty.*hk(?:lm|cu|cr)|registry.*modif', re.I),
+        'T1112', 'Modify Registry', 'Defense Evasion'),
+    (re.compile(r'\bmasquerad|svchost.*unusual.*path|lsass.*renamed|process.*impersonat|binary.*rename', re.I),
+        'T1036', 'Masquerading', 'Defense Evasion'),
+    (re.compile(r'\bsc\s+(?:config|delete|stop)\b.*(?:sense|windefend|mssecflt|mwac|mbam)|set-mppreference.*disable|defender.*disabled|netsh.*advfirewall.*off', re.I),
+        'T1562.004', 'Disable or Modify Firewall / AV', 'Defense Evasion'),
+    (re.compile(r'\bcertutil\b.*(?:-encode|-decode|-urlcache|-verifyctl)|\bbase64\b.*(?:encode|decode).*payload', re.I),
+        'T1140', 'Deobfuscate/Decode Files', 'Defense Evasion'),
+
+    # ── Credential Access ─────────────────────────────────────────────────────
+    (re.compile(r'\bmimikatz\b|\bsekurlsa\b|\blsadump::(?:sam|dcsync|lsa|cache)\b', re.I),
         'T1003', 'OS Credential Dumping', 'Credential Access'),
     (re.compile(r'\bdcsync\b|DS-Replication|1131f6aa|1131f6ab', re.I),
         'T1003.006', 'DCSync', 'Credential Access'),
@@ -94,70 +218,115 @@ _PATTERNS: list[tuple[re.Pattern, str, str, str]] = [
         'T1558.003', 'Kerberoasting', 'Credential Access'),
     (re.compile(r'\bas[-_]rep\s*roast|asreproast|preauth.*not.*required|UF_DONT_REQUIRE_PREAUTH', re.I),
         'T1558.004', 'AS-REP Roasting', 'Credential Access'),
+    (re.compile(r'\bntlm.*relay\b|responder\b|ntlmrelayx|smbrelayx|llmnr.*poison|nbt[-_]ns.*poison', re.I),
+        'T1557.001', 'LLMNR/NBT-NS Poisoning', 'Credential Access'),
+    # AD CS abuse (ESC1–ESC8): certipy/certify tools, SAN abuse, PKINIT, forged certs
+    (re.compile(r'\bcertipy\b|\bcertify\.exe\b|\badcspwn\b|esc[1-8]\b|adcs.*exploit|certificate.*san.*template|pkinit.*abuse|pkiextendedkeyusage|enroll.*dc.*cert|pfx.*dump', re.I),
+        'T1649', 'Steal or Forge Authentication Certificates (AD CS)', 'Credential Access'),
+    (re.compile(r'\bpassword\s+spray|pwspray\b|many.*failed.*logon.*same.*pass|o365.*spray|fireprox\b|exchange.*spray|lockout.*multiple.*accounts', re.I),
+        'T1110.003', 'Password Spraying', 'Credential Access'),
+    (re.compile(r'\bcredential.*stuff|stuffing\b|combo.*list.*login|breached.*cred.*logon', re.I),
+        'T1110.004', 'Credential Stuffing', 'Credential Access'),
+    (re.compile(r'\blazagne\b|browser.*password|credential.*manager|dpapi.*cred|vaultcmd\b|cmdkey\s+/list|windows.*vault', re.I),
+        'T1555', 'Credentials from Password Stores', 'Credential Access'),
+    (re.compile(r'\bunattend(?:ed)?\.xml|sysprep\.xml|groups\.xml|web\.config.*password|appsettings.*password|connection.*string.*password|\.netrc\b', re.I),
+        'T1552.001', 'Credentials in Files', 'Credential Access'),
+    (re.compile(r'reg.*query.*password|hklm.*security.*cache|lsa.*secrets\b|winlogon.*defaultpassword|autologon.*password', re.I),
+        'T1552.002', 'Credentials in Registry', 'Credential Access'),
+    (re.compile(r'\bresponder\b.*hash|force.*auth|uncpath.*\\\\|net.*use.*\\\\[^\\]+\\[^\\]+.*password', re.I),
+        'T1187', 'Forced Authentication', 'Credential Access'),
+
+    # ── Discovery ─────────────────────────────────────────────────────────────
+    (re.compile(r'\bpowerview\b|Get-Domain(?:User|Group|Computer|Controller|Trust)|Find-LocalAdminAccess|Get-NetLocalGroup', re.I),
+        'T1069.002', 'Domain Groups Discovery', 'Discovery'),
+    (re.compile(r'\bbloodhound\b|\bsharphound\b|Invoke-BloodHound|CollectionMethod|ADExplorer\b', re.I),
+        'T1069.002', 'AD Reconnaissance (BloodHound)', 'Discovery'),
+    (re.compile(r'\bnmap\b|\bport.*scan\b|\bnetwork.*scan\b|masscan\b|unicornscan\b', re.I),
+        'T1046', 'Network Service Discovery', 'Discovery'),
+    (re.compile(r'\bldapdomaindump\b|\badrecon\b|ldap.*dump|bloodhound.*session|ldapsearch\b|dsquery\b', re.I),
+        'T1087.002', 'Domain Account Enumeration', 'Discovery'),
+    (re.compile(r'\bnet\s+user\b.*domain|net\s+group.*domain admins|nltest.*dclist|nltest.*domain_trusts', re.I),
+        'T1087.002', 'Domain Account Discovery', 'Discovery'),
+    (re.compile(r'\bnet\s+user\b(?!.*domain)|wmic\s+useraccount|get-localuser\b', re.I),
+        'T1087.001', 'Local Account Discovery', 'Discovery'),
+    (re.compile(r'\b(?:ipconfig|ifconfig|ip\s+addr\b|arp\s+-a|route\s+print|netsh\s+interface)', re.I),
+        'T1016', 'System Network Configuration Discovery', 'Discovery'),
+    (re.compile(r'\b(?:net\s+view\b|nbtscan\b|netscan\b|advanced.*ip.*scanner|angry.*ip|arp-scan)\b', re.I),
+        'T1018', 'Remote System Discovery', 'Discovery'),
+    (re.compile(r'\b(?:whoami\b|getuid\b|echo\s+%username%|id\b.*uid=|hostname\b|%logonserver%)', re.I),
+        'T1033', 'System Owner/User Discovery', 'Discovery'),
+    (re.compile(r'\bnetstat\b|\bss\s+-[anptu]+\b|network.*connections.*list', re.I),
+        'T1049', 'System Network Connections Discovery', 'Discovery'),
+    (re.compile(r'\btasklist\b|get-process\b|wmic\s+process\b|ps\s+aux\b', re.I),
+        'T1057', 'Process Discovery', 'Discovery'),
+    (re.compile(r'\bsysteminfo\b|uname\s+-a\b|get-computerinfo\b|wmic\s+os\b|winver\b', re.I),
+        'T1082', 'System Information Discovery', 'Discovery'),
+    (re.compile(r'\bnet\s+share\b|showmount\b|smbclient\s+-L\b|get-smbshare\b', re.I),
+        'T1135', 'Network Share Discovery', 'Discovery'),
+    (re.compile(r'\bnet\s+accounts\b|password.*policy\b|account.*lockout.*policy\b|get-addefaultdomainpasswordpolicy\b', re.I),
+        'T1201', 'Password Policy Discovery', 'Discovery'),
+    (re.compile(r'\bnltest\b.*domain_trusts|get-adtrust\b|get-forest\b|trusteddomains\b|domain.*trust.*enum', re.I),
+        'T1482', 'Domain Trust Discovery', 'Discovery'),
+
+    # ── Lateral Movement ──────────────────────────────────────────────────────
     (re.compile(r'\bpass[-_]the[-_]hash\b|sekurlsa::pth|ntlm.*hash.*logon|overpass.*hash', re.I),
         'T1550.002', 'Pass the Hash', 'Lateral Movement'),
     (re.compile(r'\bpass[-_]the[-_]ticket\b|rubeus.*ptt|kerberos::ptt|use.*ticket', re.I),
         'T1550.003', 'Pass the Ticket', 'Lateral Movement'),
-    (re.compile(r'\bskeleton[-_\s]key\b|misc::skeleton|patching.*lsass|lsass.*patch', re.I),
-        'T1207', 'Rogue Domain Controller', 'Defense Evasion'),
-    (re.compile(r'\bntlm.*relay\b|responder|ntlmrelayx|smbrelayx|llmnr.*poison|nbt[-_]ns.*poison', re.I),
-        'T1557.001', 'LLMNR/NBT-NS Poisoning', 'Credential Access'),
-    (re.compile(r'\bpowershell\b.*-e(?:nc\b|ncodedcommand)|iex.*downloadstring|invoke-expression', re.I),
-        'T1059.001', 'PowerShell', 'Execution'),
-    (re.compile(r'\bpowerview\b|Get-DomainUser|Get-DomainGroupMember|Find-LocalAdminAccess', re.I),
-        'T1069.002', 'Domain Groups Discovery', 'Discovery'),
-    (re.compile(r'\bbloodhound\b|\bsharphound\b|Invoke-BloodHound|CollectionMethod', re.I),
-        'T1069.002', 'Domain Groups Discovery', 'Discovery'),
-    (re.compile(r'\bnmap\b|\bport.*scan\b|\bnetwork.*scan', re.I),
-        'T1046', 'Network Service Discovery', 'Discovery'),
-    (re.compile(r'\bldapdomaindump\b|\badrecon\b|ldap.*dump', re.I),
-        'T1087.002', 'Domain Account Enumeration', 'Discovery'),
-    (re.compile(r'\bnet\s+user\b.*domain|net\s+group.*domain admins|nltest.*dclist', re.I),
-        'T1087.002', 'Domain Account', 'Discovery'),
-    (re.compile(r'\bpsexec\b|\bpsexesvc\b|\bsmbexec\b|\batexec\b|\bdcomexec\b', re.I),
-        'T1021.002', 'SMB/Windows Admin Shares', 'Lateral Movement'),
+    (re.compile(r'\bpsexec\b|\bpsexesvc\b|\bsmbexec\b|\batexec\b', re.I),
+        'T1021.002', 'SMB/PsExec Lateral Movement', 'Lateral Movement'),
+    (re.compile(r'\bdcomexec\b|\bdcom\b.*(?:lateral|exec|remote)|MMC20\.Application|ShellWindows|ShellBrowserWindow', re.I),
+        'T1021.003', 'DCOM Lateral Movement', 'Lateral Movement'),
     (re.compile(r'\bwmiexec\b|\bwmic\s+/node:\b|win32_process.*create|invoke-wmimethod', re.I),
-        'T1047', 'Windows Management Instrumentation', 'Lateral Movement'),
+        'T1047', 'WMI Remote Execution', 'Lateral Movement'),
     (re.compile(r'\brdp\b.*lateral|mstsc.*lateral|logon type.*10\b|type\s+10\b', re.I),
         'T1021.001', 'Remote Desktop Protocol', 'Lateral Movement'),
+    (re.compile(r'\btscon\b|\brdp.*hijack|shadow.*session.*connect|shadow\s+/server\b', re.I),
+        'T1563.002', 'RDP Session Hijacking', 'Lateral Movement'),
     (re.compile(r'\bwinrm\b|\benter-pssession\b|\binvoke-command\b.*ComputerName', re.I),
         'T1021.006', 'Windows Remote Management', 'Lateral Movement'),
-    (re.compile(r'\bldapdomaindump\b|\badrecon\b|ldap.*dump|bloodhound.*session', re.I),
-        'T1087.002', 'Domain Account Enumeration', 'Discovery'),
-    (re.compile(r'\bfodhelper\b|ms-settings.*shell.*open.*command|uac.*bypass|bypass.*uac', re.I),
-        'T1548.002', 'Bypass User Account Control', 'Privilege Escalation'),
-    (re.compile(r'\bprintnightmare\b|cve-2021-34527|spoolsv.*cmd|print spooler', re.I),
-        'T1068', 'Exploitation for Privilege Escalation', 'Privilege Escalation'),
-    (re.compile(r'\bjuicypotato\b|\brottenpotato\b|\bsweetpotato\b|seimpersonatepriv', re.I),
-        'T1134.002', 'Create Process with Token', 'Privilege Escalation'),
-    (re.compile(r'\balwaysinstallelevated\b|malicious.*msi|msi.*elevated', re.I),
-        'T1548.002', 'Bypass User Account Control', 'Privilege Escalation'),
-    (re.compile(r'\bunquoted.*service\b|service.*path.*unquoted', re.I),
-        'T1574.009', 'Unquoted Service Path', 'Privilege Escalation'),
-    (re.compile(r'\bwmi.*(?:event)?filter\b|\b__eventfilter\b|commandlineeventconsumer', re.I),
-        'T1546.003', 'WMI Event Subscription', 'Persistence'),
-    (re.compile(r'\bbitsadmin\b|bits.*job', re.I),
-        'T1197', 'BITS Jobs', 'Persistence'),
-    (re.compile(r'\bsethc\b|image file execution options|accessibility.*debug', re.I),
-        'T1546.008', 'Accessibility Features', 'Persistence'),
-    (re.compile(r'inprocserver32|com.*hijack|clsid.*dll', re.I),
-        'T1546.015', 'COM Hijacking', 'Persistence'),
-    (re.compile(r'\bauthorized_keys\b|ssh.*backdoor|rsa.*pub.*key', re.I),
-        'T1098.004', 'SSH Authorized Keys', 'Persistence'),
-    (re.compile(r'winlogon.*userinitmpr|logon.*script|logon\.bat', re.I),
-        'T1037.001', 'Logon Script', 'Persistence'),
-    (re.compile(r'\bmsse-\d+|createremotethread|reflective.*inject|pipe.*created', re.I),
-        'T1055', 'Process Injection', 'Defense Evasion'),
-    (re.compile(r'\bamsi\b|amsiutils|invoke-obfuscat|etw.*bypass|amsi\.dll', re.I),
-        'T1562.001', 'Disable or Modify Tools', 'Defense Evasion'),
-    (re.compile(r'\bwevtutil\s+cl\b|event.*log.*cleared|clearev', re.I),
-        'T1070.001', 'Clear Windows Event Logs', 'Defense Evasion'),
-    (re.compile(r'\brobocopy\b|staging.*directory|data.*staging', re.I),
+    (re.compile(r'\beternalblue\b|ms17-010|cve-2017-0144|doublepulsar\b|smb.*exploit.*445', re.I),
+        'T1210', 'Exploitation of Remote Services', 'Lateral Movement'),
+
+    # ── Collection ────────────────────────────────────────────────────────────
+    (re.compile(r'\brobocopy\b|staging.*directory|data.*staging\b', re.I),
         'T1074', 'Data Staged', 'Collection'),
+    (re.compile(r'\bkeylog\b|keylogger\b|hook.*keyboard|GetAsyncKeyState|SetWindowsHook', re.I),
+        'T1056.001', 'Keylogging', 'Collection'),
+    (re.compile(r'\bscreenshot\b|screen.*capture\b|printscreen\b|copyfromscreen\b|bitblt\b', re.I),
+        'T1113', 'Screen Capture', 'Collection'),
+    (re.compile(r'\b7z\b.*(?:a\b|-mhe|-p)|\brar\b.*(?:-p\b|-hp\b)|\bzip\b.*password|compress.*archive.*exfil', re.I),
+        'T1560', 'Archive Collected Data', 'Collection'),
+
+    # ── Command and Control ───────────────────────────────────────────────────
+    (re.compile(r'\bchisel\b|\bplink\.exe\b|\bngrok\b|\bfrp\b|ssh.*-[RL]\s+\d{4}|socat.*tcp.*forward|protocol.*tunnel', re.I),
+        'T1572', 'Protocol Tunneling', 'Command and Control'),
+    (re.compile(r'\bdns.*tunnel|dnscat\b|iodine\b|dns2tcp\b|base64.*dns.*txt|exfil.*dns\b', re.I),
+        'T1071.004', 'DNS Tunneling', 'Command and Control'),
+    (re.compile(r'\bbeacon\b.*(?:http|https)|c2.*(?:http|https)|cobalt.*strike.*http|malleable.*profile|sleep.*jitter\b', re.I),
+        'T1071.001', 'Web Protocols C2', 'Command and Control'),
+    (re.compile(r'\bsocks[45]?\b.*proxy|proxychains\b|pivot.*proxy|socks.*forward', re.I),
+        'T1090.002', 'External Proxy', 'Command and Control'),
+
+    # ── Exfiltration ──────────────────────────────────────────────────────────
+    (re.compile(r'\bmega\.nz\b|\brclone\b|azcopy\b|aws\s+s3.*cp\b|exfil.*cloud|curl.*upload.*(?:mega|dropbox|onedrive)', re.I),
+        'T1567', 'Exfiltration to Cloud Storage', 'Exfiltration'),
+    (re.compile(r'\bexfil\b|data.*exfil|certutil.*encode.*exfil|nc\b.*-e\b|curl.*upload\b', re.I),
+        'T1048', 'Exfiltration over Alternative Protocol', 'Exfiltration'),
+    (re.compile(r'\bdns.*exfil|base64.*dns.*query|txt.*record.*data|dnscat.*send', re.I),
+        'T1048.003', 'DNS Exfiltration', 'Exfiltration'),
+
+    # ── Impact ────────────────────────────────────────────────────────────────
+    (re.compile(r'\bransom\b|\.encrypted\b|\.locked\b|your.*files.*encrypted|payment.*bitcoin|cryptolocker|lockbit|ryuk|conti\b|revil|darkside|blackcat|alphv\b|readme.*decrypt', re.I),
+        'T1486', 'Data Encrypted for Impact (Ransomware)', 'Impact'),
     (re.compile(r'\bvssadmin\b.*delete|delete.*shadow|net\s+stop\s+vss', re.I),
         'T1490', 'Inhibit System Recovery', 'Impact'),
-    (re.compile(r'\biam\s+create.user\b|createuser.*svc|attachuserpolicy.*administrator', re.I),
-        'T1136.003', 'Cloud Account', 'Persistence'),
+    (re.compile(r'\bnet\s+stop\b.*(?:vss\b|backup\b|sql\b|mssql\b|exchange\b|mysql\b)|taskkill.*(?:sql|backup|antivirus)|sc\s+stop\b.*(?:vss|mssql|backup)', re.I),
+        'T1489', 'Service Stop', 'Impact'),
+    (re.compile(r'\bshutdown\b.*(?:/r\b|/s\b|/h\b|-r\b|-h\b)|restart-computer\b|poweroff\b.*forced|halt\b.*system', re.I),
+        'T1529', 'System Shutdown/Reboot', 'Impact'),
+    (re.compile(r'\bwbadmin\b.*delete|bcdedit.*(?:recoveryenabled\s+no|bootstatuspolicy\s+ignoreallfailures)|diskshadow.*delete\s+shadows', re.I),
+        'T1561', 'Boot/Recovery Config Destruction', 'Impact'),
 ]
 
 # ── Conditional guards for high-noise Event IDs ────────────────────────────────
@@ -240,20 +409,23 @@ def _actor_key(e: ForensicEvent) -> tuple[str, str]:
 def _is_lateral(e: ForensicEvent) -> bool:
     """Return True when this event represents lateral movement."""
     desc = (e.description or '').lower()
-    if e.event_id in ('5140', '5145'):
+    if e.event_id in ('5140', '5145', '8004'):
         return True
     if e.event_id == '4624':
         if re.search(r'logon type:\s*(?:3|10)\b|type\s+(?:3|10)\b|network logon', desc, re.I):
             return True
     if e.event_id == '4776':
-        # NTLM auth from a non-local source is lateral movement
         if re.search(r'workstation.*name|source.*address', desc, re.I):
             return True
     if re.search(
         r'\bpsexec\b|\bpsexesvc\b|\bwmiexec\b|\bsmbexec\b|\batexec\b|\bdcomexec\b'
         r'|\bwmic\s+/node:\b|win32_process.*create'
         r'|\bpass[-_]the[-_]hash\b|sekurlsa::pth'
-        r'|\bpass[-_]the[-_]ticket\b|rubeus.*ptt',
+        r'|\bpass[-_]the[-_]ticket\b|rubeus.*ptt'
+        r'|\btscon\b|\brdp.*hijack|shadow.*session.*connect'
+        r'|\bdcom.*exec|MMC20\.Application|ShellWindows|ShellBrowserWindow'
+        r'|\beternalblue\b|ms17-010|doublepulsar\b'
+        r'|\bwinrm\b|\benter-pssession\b|\binvoke-command\b.*computername',
         desc, re.I,
     ):
         return True
@@ -501,22 +673,30 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
         desc = e.description or ''
         if e.event_id in ('5140', '5145'):
             method, tid = 'SMB Share Access', 'T1021.002'
+        elif re.search(r'eternalblue|ms17-010|doublepulsar', desc, re.I):
+            method, tid = 'EternalBlue/MS17-010 Exploit', 'T1210'
         elif re.search(r'wmiexec|wmic\s+/node:|win32_process.*create', desc, re.I):
             method, tid = 'WMI Remote Execution', 'T1047'
         elif re.search(r'psexec|psexesvc|smbexec', desc, re.I):
             method, tid = 'PsExec/SMBExec', 'T1021.002'
+        elif re.search(r'dcomexec|MMC20\.Application|ShellWindows|ShellBrowserWindow', desc, re.I):
+            method, tid = 'DCOM Remote Execution', 'T1021.003'
+        elif re.search(r'tscon|rdp.*hijack|shadow.*session.*connect', desc, re.I):
+            method, tid = 'RDP Session Hijacking', 'T1563.002'
+        elif re.search(r'winrm|enter-pssession|invoke-command.*computername', desc, re.I):
+            method, tid = 'WinRM Remote Execution', 'T1021.006'
         elif re.search(r'pass[-_]the[-_]hash|sekurlsa::pth', desc, re.I):
             method, tid = 'Pass-the-Hash', 'T1550.002'
         elif re.search(r'pass[-_]the[-_]ticket|rubeus.*ptt|kerberos::ptt', desc, re.I):
             method, tid = 'Pass-the-Ticket', 'T1550.003'
+        elif e.event_id in ('4776', '8004'):
+            method, tid = 'NTLM Authentication', 'T1550.002'
         elif e.event_id == '4624':
             lt = re.search(r'Logon Type:\s*(\d+)', desc, re.I)
             if lt and lt.group(1) == '10':
                 method, tid = 'RDP (Remote Interactive)', 'T1021.001'
             else:
                 method, tid = 'Network Logon (Type 3)', 'T1021.002'
-        elif e.event_id == '4776':
-            method, tid = 'NTLM Authentication', 'T1550.002'
         else:
             method, tid = 'Remote Execution', 'T1021.002'
 
@@ -579,15 +759,42 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     tactics_seen = dict.fromkeys(s['tactic'] for s in attack_steps)
     tactic_progression = [t for t in TACTIC_ORDER if t in tactics_seen]
 
-    # ── Entry vector ───────────────────────────────────────────────────────────
-    entry_vector = 'Unknown'
+    # ── Entry vector / patient zero host ──────────────────────────────────────
+    # Priority 1 — explicit Initial Access step from pattern matching
+    # Priority 2 — earliest lateral path arriving from a non-RFC-1918 source IP
+    #              (indicates the external beachhead host)
+    # Priority 3 — earliest classified attack step chronologically
+    _RFC1918 = re.compile(
+        r'^(?:10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+'
+        r'|192\.168\.\d+\.\d+|127\.\d+\.\d+\.\d+|::1|-)$'
+    )
+
+    entry_vector     = 'Unknown'
+    patient_zero_host = ''
+
     for s in attack_steps:
         if s['tactic'] == 'Initial Access':
-            entry_vector = f"{s['technique_name']} on {s['host']} at {s['timestamp'][:16]}"
+            actor_str = f" (user: {s['user']})" if s['user'] else ''
+            entry_vector     = f"{s['technique_name']} on {s['host']}{actor_str} at {s['timestamp'][:16]}"
+            patient_zero_host = s['host'] or ''
             break
+
+    if entry_vector == 'Unknown' and lateral_paths:
+        for lp in lateral_paths:
+            src = lp.get('from_host', '')
+            if src and not _RFC1918.match(src):
+                patient_zero_host = lp['to_host']
+                entry_vector = (
+                    f"External connection from {src} → {lp['to_host']} "
+                    f"via {lp['method']} (user: {lp['user']}) at {lp['timestamp'][:16]}"
+                )
+                break
+
     if entry_vector == 'Unknown' and attack_steps:
-        first = attack_steps[0]
-        entry_vector = f"{first['technique_name']} on {first['host']} at {first['timestamp'][:16]}"
+        first             = attack_steps[0]
+        actor_str         = f" (user: {first['user']})" if first['user'] else ''
+        entry_vector      = f"{first['technique_name']} on {first['host']}{actor_str} at {first['timestamp'][:16]}"
+        patient_zero_host = first['host'] or ''
 
     # ── Threat actor profile ───────────────────────────────────────────────────
     tids_seen  = {s['technique_id'] for s in attack_steps}
@@ -661,6 +868,7 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     return {
         'threat_actor_profile':  actor_profile,
         'entry_vector':          entry_vector,
+        'patient_zero_host':     patient_zero_host,
         'tactic_progression':    tactic_progression,
         'attack_steps':          attack_steps,
         'lateral_paths':         lateral_paths,
@@ -685,6 +893,7 @@ def _empty() -> dict:
     return {
         'threat_actor_profile':   '',
         'entry_vector':           '',
+        'patient_zero_host':      '',
         'tactic_progression':     [],
         'attack_steps':           [],
         'lateral_paths':          [],

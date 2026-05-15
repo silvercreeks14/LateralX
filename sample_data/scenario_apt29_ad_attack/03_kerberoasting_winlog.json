@@ -1,0 +1,258 @@
+[
+  {
+    "datetime": "2024-03-15T08:20:01Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Logon GUID: {00000000-0000-0000-0000-000000000000} Service Information: Service Name: MSSQLSvc/SRV-SQL01.corp.local:1433 Service ID: S-1-5-21-2832489128-1218823774-3428483479-1126 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50501 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:04Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: HTTP/SRV-EXCH01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1138 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50502 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:07Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: cifs/SRV-FILE01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1152 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50503 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:10Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: host/WS02.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1160 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50504 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:13Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: ldap/DC01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1000 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50505 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:16Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: exchangeMDB/SRV-EXCH01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1145 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50506 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:19Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: MSSQLSvc/SRV-SQL01.corp.local:5022 Service ID: S-1-5-21-2832489128-1218823774-3428483479-1127 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50507 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:22Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: host/SRV-FILE01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1153 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50508 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:25Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: cifs/WS03.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1162 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50509 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:28Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: MSSQLSvc/SRV-SQL01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1125 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50510 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:31Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: svc_backup/DC01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1200 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50511 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:34Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: HTTP/WS01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1101 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50512 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:37Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: svc_adfs/SRV-ADFS01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1205 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50513 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:40Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: cifs/DC01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1001 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50514 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:43Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: host/DC02.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1002 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50515 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:46Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: svc_print/SRV-PRINT01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1210 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50516 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:49Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: ldap/DC02.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1003 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50517 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:52Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: svc_monitoring/SRV-MON01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1215 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50518 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:55Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: GC/DC01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1005 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50519 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:20:58Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: RPCSS/SRV-FILE01.corp.local Service ID: S-1-5-21-2832489128-1218823774-3428483479-1155 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50520 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:21:01Z",
+    "timestamp_desc": "Kerberos Service Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "jsmith",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: jsmith@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: svc_backup@CORP.LOCAL Service ID: S-1-5-21-2832489128-1218823774-3428483479-1200 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50521 Additional Information: Ticket Options: 0x40810000 Ticket Encryption Type: 0x17 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:21:05Z",
+    "timestamp_desc": "Kerberos Authentication Ticket Request",
+    "hostname": "DC01.corp.local",
+    "username": "svc_backup",
+    "EventID": "4768",
+    "message": "A Kerberos authentication ticket (TGT) was requested. Account Information: Account Name: svc_backup Account Domain: CORP.LOCAL Supplied Realm Name: CORP.LOCAL User ID: S-1-5-21-2832489128-1218823774-3428483479-1200 Service Information: Service Name: krbtgt Service ID: S-1-5-21-2832489128-1218823774-3428483479-502 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50530 Additional Information: Ticket Options: 0x40810010 Ticket Encryption Type: 0x17 Pre-Authentication Type: 0 Result Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:21:30Z",
+    "timestamp_desc": "AS-REP Roasting — Pre-auth not required",
+    "hostname": "DC01.corp.local",
+    "username": "svc_scan",
+    "EventID": "4768",
+    "message": "A Kerberos authentication ticket (TGT) was requested. Account Information: Account Name: svc_scan Account Domain: CORP.LOCAL User ID: S-1-5-21-2832489128-1218823774-3428483479-1220 Service Information: Service Name: krbtgt Service ID: S-1-5-21-2832489128-1218823774-3428483479-502 Network Information: Client Address: ::ffff:192.168.10.101 Client Port: 50535 Additional Information: Ticket Options: 0x50800000 Ticket Encryption Type: 0x17 Pre-Authentication Type: 0 DONT_REQUIRE_PREAUTH Result Code: 0x0 Note: Account does not require preauthentication"
+  },
+  {
+    "datetime": "2024-03-15T08:22:00Z",
+    "timestamp_desc": "Kerberos Pre-authentication failed",
+    "hostname": "DC01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4771",
+    "message": "Kerberos pre-authentication failed. Account Information: Security ID: S-1-5-21-2832489128-1218823774-3428483479-1104 Account Name: mrodriguez Client Address: ::ffff:192.168.10.101 Client Port: 50540 Additional Information: Ticket Options: 0x40810010 Failure Code: 0x18 Pre-Authentication Type: 2"
+  },
+  {
+    "datetime": "2024-03-15T08:22:05Z",
+    "timestamp_desc": "Kerberos Pre-authentication failed",
+    "hostname": "DC01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4771",
+    "message": "Kerberos pre-authentication failed. Account Information: Security ID: S-1-5-21-2832489128-1218823774-3428483479-1104 Account Name: mrodriguez Client Address: ::ffff:192.168.10.101 Client Port: 50541 Additional Information: Ticket Options: 0x40810010 Failure Code: 0x18 Pre-Authentication Type: 2"
+  },
+  {
+    "datetime": "2024-03-15T08:22:10Z",
+    "timestamp_desc": "Kerberos Pre-authentication failed",
+    "hostname": "DC01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4771",
+    "message": "Kerberos pre-authentication failed. Account Information: Security ID: S-1-5-21-2832489128-1218823774-3428483479-1104 Account Name: mrodriguez Client Address: ::ffff:192.168.10.101 Client Port: 50542 Additional Information: Ticket Options: 0x40810010 Failure Code: 0x18 Pre-Authentication Type: 2"
+  },
+  {
+    "datetime": "2024-03-15T08:22:15Z",
+    "timestamp_desc": "Kerberos Pre-authentication failed",
+    "hostname": "DC01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4771",
+    "message": "Kerberos pre-authentication failed. Account Information: Security ID: S-1-5-21-2832489128-1218823774-3428483479-1104 Account Name: mrodriguez Client Address: ::ffff:192.168.10.101 Client Port: 50543 Additional Information: Ticket Options: 0x40810010 Failure Code: 0x18 Pre-Authentication Type: 2"
+  },
+  {
+    "datetime": "2024-03-15T08:22:20Z",
+    "timestamp_desc": "Kerberos Pre-authentication failed",
+    "hostname": "DC01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4771",
+    "message": "Kerberos pre-authentication failed. Account Information: Security ID: S-1-5-21-2832489128-1218823774-3428483479-1104 Account Name: mrodriguez Client Address: ::ffff:192.168.10.101 Client Port: 50544 Additional Information: Ticket Options: 0x40810010 Failure Code: 0x18 Pre-Authentication Type: 2"
+  },
+  {
+    "datetime": "2024-03-15T08:22:25Z",
+    "timestamp_desc": "Kerberos Pre-authentication failed",
+    "hostname": "DC01.corp.local",
+    "username": "mrodriguez",
+    "EventID": "4771",
+    "message": "Kerberos pre-authentication failed. Account Information: Security ID: S-1-5-21-2832489128-1218823774-3428483479-1104 Account Name: mrodriguez Client Address: ::ffff:192.168.10.101 Client Port: 50545 Additional Information: Ticket Options: 0x40810010 Failure Code: 0x18 Pre-Authentication Type: 2"
+  },
+  {
+    "datetime": "2024-03-15T08:23:00Z",
+    "timestamp_desc": "Kerberos Authentication Success — svc_backup cracked password",
+    "hostname": "DC01.corp.local",
+    "username": "svc_backup",
+    "EventID": "4768",
+    "message": "A Kerberos authentication ticket (TGT) was requested. Account Information: Account Name: svc_backup Account Domain: CORP.LOCAL User ID: S-1-5-21-2832489128-1218823774-3428483479-1200 Service Information: Service Name: krbtgt Service ID: S-1-5-21-2832489128-1218823774-3428483479-502 Network Information: Client Address: ::ffff:185.220.101.47 Client Port: 44601 Additional Information: Ticket Options: 0x40810010 Ticket Encryption Type: 0x12 Pre-Authentication Type: 2 Result Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:23:10Z",
+    "timestamp_desc": "Kerberos Service Ticket — svc_backup to krbtgt (Pass-the-Ticket prep)",
+    "hostname": "DC01.corp.local",
+    "username": "svc_backup",
+    "EventID": "4769",
+    "message": "A Kerberos service ticket was requested. Account Information: Account Name: svc_backup@CORP.LOCAL Account Domain: CORP.LOCAL Service Information: Service Name: krbtgt/CORP.LOCAL Service ID: S-1-5-21-2832489128-1218823774-3428483479-502 Network Information: Client Address: ::ffff:185.220.101.47 Client Port: 44605 Additional Information: Ticket Options: 0x40810010 Ticket Encryption Type: 0x12 Failure Code: 0x0"
+  },
+  {
+    "datetime": "2024-03-15T08:23:30Z",
+    "timestamp_desc": "Logon with svc_backup credentials from attacker IP",
+    "hostname": "WS01.corp.local",
+    "username": "svc_backup",
+    "EventID": "4624",
+    "message": "An account was successfully logged on. Subject: Security ID: S-1-0-0 Account Name: - Account Domain: - Logon ID: 0x0 Logon Type: 3 New Logon: Security ID: CORP\\svc_backup Account Name: svc_backup Account Domain: CORP Logon ID: 0x4B1200 Network Information: Workstation Name: ATTK-C2 Source Network Address: 185.220.101.47 Source Port: 44610 Authentication Package: Kerberos Logon Process: Kerberos"
+  }
+]

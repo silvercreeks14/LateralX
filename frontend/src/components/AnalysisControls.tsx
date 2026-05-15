@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 import { api } from '../api/client'
 import type { Upload } from '../types'
 
@@ -39,7 +39,7 @@ export default function AnalysisControls({
     <div className="space-y-3">
       {/* ── Upload source picker (multi-upload contexts) ───────────────────── */}
       {uploads.length > 1 && (
-        <div className="bg-slate-800 border border-slate-700 rounded-lg px-4 py-3">
+        <div className="bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-4 py-3">
           <p className="text-xs font-medium text-slate-500 mb-2">Analysis source:</p>
           <div className="flex flex-wrap gap-2">
             {uploads.map(u => (
@@ -49,7 +49,7 @@ export default function AnalysisControls({
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors max-w-[220px] truncate ${
                   selectedUploadId === u.id
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-900 border border-slate-700 text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400'
+                    : 'bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-cyan-500/40 hover:text-cyan-400'
                 }`}
                 title={`${u.filename} — ${u.event_count.toLocaleString()} events`}
               >
@@ -65,7 +65,7 @@ export default function AnalysisControls({
                 className={`px-3 py-1 rounded-full text-xs font-medium transition-colors border ${
                   selectedUploadId === null
                     ? 'bg-amber-500 text-white border-amber-500'
-                    : 'bg-slate-900 border-amber-700/40 text-amber-400 hover:bg-amber-950/20'
+                    : 'bg-white dark:bg-slate-900 border-amber-700/40 text-amber-400 hover:bg-amber-950/20'
                 }`}
                 title="Analyse all uploads merged (admin only)"
               >
@@ -106,7 +106,7 @@ export default function AnalysisControls({
             <button
               onClick={handleExport}
               disabled={exporting}
-              className="text-xs border px-3 py-1.5 rounded-md text-slate-300 border-slate-600 hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1.5"
+              className="text-xs border px-3 py-1.5 rounded-md text-slate-300 border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1.5"
               title={
                 activeCaseId
                   ? 'Export full case forensic report as HTML'

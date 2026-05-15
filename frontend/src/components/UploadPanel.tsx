@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+﻿import { useState, useCallback } from 'react'
 import { api } from '../api/client'
 import type { EventSummary, UploadResponse } from '../types'
 
@@ -55,9 +55,9 @@ export default function UploadPanel({ onUploadSuccess, activeCaseId, currentSumm
     : 'border-slate-700 hover:border-slate-500'
 
   return (
-    <div className="bg-slate-900 rounded-2xl border border-slate-800 p-6">
+    <div className="bg-white dark:bg-slate-900 rounded-2xl border border-slate-800 p-6">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-base font-semibold text-white">Upload Evidence File</h2>
+        <h2 className="text-base font-semibold text-slate-900 dark:text-white">Upload Evidence File</h2>
         {activeCaseId && (
           <span className="inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border"
             style={{ background: '#00F0FF10', borderColor: '#00F0FF30', color: '#00F0FF' }}>

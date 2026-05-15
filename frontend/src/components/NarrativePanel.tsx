@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useRef } from 'react'
 import { api } from '../api/client'
 import type { RCAResult, MLModelStatus, ThreatIntelStatus, Upload, AttackClassification } from '../types'
 import MitrePanel from './MitrePanel'
@@ -65,7 +65,7 @@ function LoadingScreen() {
                     'Still working — large dataset or slow hardware detected…'
 
   return (
-    <div className="bg-slate-900 rounded-xl border border-slate-800 p-14 flex flex-col items-center gap-5 text-center">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-800 p-14 flex flex-col items-center gap-5 text-center">
       <div className="relative">
         <svg className="animate-spin h-12 w-12" fill="none" viewBox="0 0 24 24" style={{ color: '#00F0FF' }}>
           <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
@@ -100,7 +100,7 @@ function LoadingScreen() {
       </p>
 
       {elapsed > 30 && (
-        <div className="text-xs text-slate-500 bg-slate-800 rounded-lg px-3 py-2 max-w-xs">
+        <div className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-lg px-3 py-2 max-w-xs">
           Tip: <span className="text-slate-300">Quick Scan</span> takes &lt;5 seconds and
           provides MITRE, IOCs, and ML scores without waiting for Ollama.
         </div>
@@ -154,7 +154,7 @@ function AttackClassificationPanel({ clf }: { clf: AttackClassification }) {
           {clf.mitre_techniques.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {clf.mitre_techniques.map(id => (
-                <span key={id} className="text-xs px-1.5 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-400 font-mono">{id}</span>
+                <span key={id} className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-mono">{id}</span>
               ))}
             </div>
           )}
@@ -163,7 +163,7 @@ function AttackClassificationPanel({ clf }: { clf: AttackClassification }) {
               <p className="text-xs text-slate-500 mb-1">Key indicators:</p>
               <div className="flex flex-wrap gap-1">
                 {clf.top_evidence.map((kw, i) => (
-                  <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-slate-900 border font-mono"
+                  <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-900 border font-mono"
                     style={{ borderColor: meta.color + '55', color: meta.color }}>{kw}</span>
                 ))}
               </div>
@@ -215,7 +215,7 @@ function TabBar({
   onChange: (id: TabId) => void
 }) {
   return (
-    <div className="flex border-b border-slate-800 bg-slate-900 rounded-t-xl overflow-hidden">
+    <div className="flex border-b border-slate-800 bg-white dark:bg-slate-900 rounded-t-xl overflow-hidden">
       {tabs.map(t => {
         const isActive = t.id === active
         return (
@@ -248,8 +248,9 @@ export default function NarrativePanel({
 }: Props) {
   const [activeTab,  setActiveTab]  = useState<TabId>('overview')
   const [tiStatus,   setTiStatus]   = useState<ThreatIntelStatus | null>(null)
-  const [verifying,  setVerifying]  = useState<string | null>(null)
-  const [verifyDone, setVerifyDone] = useState<Record<string, boolean>>({})
+  const [verifying,   setVerifying]   = useState<string | null>(null)
+  const [verifyDone,  setVerifyDone]  = useState<Record<string, boolean>>({})
+  const [verifyError, setVerifyError] = useState<string | null>(null)
 
   useEffect(() => {
     let live = true
@@ -259,10 +260,17 @@ export default function NarrativePanel({
 
   const handleVerify = useCallback(async (entity: string, isPositive: boolean) => {
     setVerifying(entity)
+    setVerifyError(null)
     try {
       await api.verifyMlPrediction(entity, isPositive)
       setVerifyDone(prev => ({ ...prev, [entity]: true }))
-    } catch { /* silent */ } finally { setVerifying(null) }
+    } catch (e) {
+      setVerifyError(
+        e instanceof Error ? e.message : 'Verification failed — ensure a full analysis has been run first.'
+      )
+    } finally {
+      setVerifying(null)
+    }
   }, [])
 
   // Jump to investigation tab automatically when results arrive
@@ -276,7 +284,7 @@ export default function NarrativePanel({
   // ── Empty state ─────────────────────────────────────────────────────────────
   if (!result) {
     return (
-      <div className="bg-slate-900 rounded-xl border border-slate-800 p-10 flex flex-col items-center gap-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-800 p-10 flex flex-col items-center gap-6">
         <div className="text-center">
           <svg className="mx-auto h-12 w-12 text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
@@ -360,7 +368,7 @@ export default function NarrativePanel({
     <div className="space-y-3">
 
       {/* ── Controls card (always visible above tabs) ────────────────────── */}
-      <div className="bg-slate-900 rounded-xl border border-slate-800 px-4 py-3 space-y-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-800 px-4 py-3 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${confidenceCls}`}>
             {result.confidence.toUpperCase()} CONFIDENCE
@@ -389,7 +397,7 @@ export default function NarrativePanel({
           {activeTab === 'overview' && (
             <>
               {/* Severity */}
-              <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Severity Score</span>
                   <span className={`text-sm font-bold ${sStyle.text}`}>{sLabel} — {result.severity_score}/100</span>
@@ -430,16 +438,24 @@ export default function NarrativePanel({
 
           {/* Behavioral tab ────────────────────────────────────────────────── */}
           {activeTab === 'behavioral' && (
-            <MLEntityBehavior
-              mlScores={result.ml_anomaly_scores ?? []}
-              mlStatus={mlStatus}
-              isAdmin={isAdmin}
-              activeCaseId={activeCaseId}
-              uploadId={uploads.length > 1 ? (uploads[0]?.id ?? null) : null}
-              verifyDone={verifyDone}
-              verifying={verifying}
-              onVerify={handleVerify}
-            />
+            <>
+              {verifyError && (
+                <div className="mb-3 bg-red-950/50 border border-red-800/50 text-red-300 rounded px-3 py-2 text-xs flex items-center justify-between">
+                  <span>{verifyError}</span>
+                  <button onClick={() => setVerifyError(null)} className="ml-3 text-red-400 hover:text-red-200 font-bold">✕</button>
+                </div>
+              )}
+              <MLEntityBehavior
+                mlScores={result.ml_anomaly_scores ?? []}
+                mlStatus={mlStatus}
+                isAdmin={isAdmin}
+                activeCaseId={activeCaseId}
+                uploadId={uploads.length > 1 ? (uploads[0]?.id ?? null) : null}
+                verifyDone={verifyDone}
+                verifying={verifying}
+                onVerify={handleVerify}
+              />
+            </>
           )}
 
         </div>

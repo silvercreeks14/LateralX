@@ -1,4 +1,4 @@
-import type { MitreTechnique } from '../types'
+﻿import type { MitreTechnique } from '../types'
 
 interface Props {
   techniques: MitreTechnique[]
@@ -28,7 +28,7 @@ export default function MitrePanel({ techniques }: Props) {
   }, {})
 
   return (
-    <div className="bg-slate-900 rounded-lg border border-slate-800 p-4">
+    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
       <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">
         MITRE ATT&amp;CK Techniques Identified ({techniques.length})
       </h3>
@@ -40,7 +40,7 @@ export default function MitrePanel({ techniques }: Props) {
             </p>
             <div className="flex flex-wrap gap-2">
               {techs.map((t) => {
-                const style = TACTIC_COLORS[t.tactic] ?? 'bg-slate-800 border-slate-700 text-slate-400'
+                const style = TACTIC_COLORS[t.tactic] ?? 'bg-slate-800 border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                 return (
                   <div
                     key={t.id}

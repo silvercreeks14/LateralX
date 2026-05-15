@@ -1,4 +1,4 @@
-import { useState } from 'react'
+﻿import { useState } from 'react'
 
 interface Props {
   actionLabel: string
@@ -23,7 +23,7 @@ export default function MfaModal({ actionLabel, onConfirm, onCancel }: Props) {
 
   return (
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl w-full max-w-sm p-6">
         <div className="flex items-start gap-3 mb-4">
           <div className="flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center"
             style={{ background: '#f59e0b20', border: '1px solid #f59e0b40' }}>
@@ -33,7 +33,7 @@ export default function MfaModal({ actionLabel, onConfirm, onCancel }: Props) {
             </svg>
           </div>
           <div>
-            <h2 className="text-base font-semibold text-white">Admin MFA Required</h2>
+            <h2 className="text-base font-semibold text-slate-900 dark:text-white">Admin MFA Required</h2>
             <p className="text-sm text-slate-500 mt-0.5">
               Action: <span className="font-medium text-slate-300">{actionLabel}</span>
             </p>
@@ -60,7 +60,7 @@ export default function MfaModal({ actionLabel, onConfirm, onCancel }: Props) {
               onChange={e => setCode(e.target.value.replace(/\D/g, ''))}
               placeholder="000000"
               autoFocus
-              className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-3 py-2.5 text-center font-mono text-xl tracking-widest focus:outline-none placeholder-slate-600"
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-3 py-2.5 text-center font-mono text-xl tracking-widest focus:outline-none placeholder-slate-400 dark:placeholder-slate-600"
               onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #f59e0b40'; e.currentTarget.style.borderColor = '#f59e0b60' }}
               onBlur={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = '' }}
             />
@@ -71,7 +71,7 @@ export default function MfaModal({ actionLabel, onConfirm, onCancel }: Props) {
             <button
               type="button"
               onClick={onCancel}
-              className="flex-1 border border-slate-700 text-slate-300 rounded-lg py-2 text-sm font-medium hover:bg-slate-800 transition-colors"
+              className="flex-1 border border-slate-700 text-slate-300 rounded-lg py-2 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               Cancel
             </button>

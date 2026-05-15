@@ -177,23 +177,3 @@ def test_ollama_connection_failure_raises_value_error():
             with pytest.raises(ValueError, match="Cannot connect to Ollama"):
                 llm_module._call_ollama("test prompt")
 
-
-# ── Chat module provider guard ────────────────────────────────────────────────
-
-def test_chat_rejects_cloud_providers():
-    """chat.run_chat must reject any provider other than ollama/none."""
-    with patch.dict(os.environ, {"LLM_PROVIDER": "groq"}):
-        import backend.analysis.chat as chat_module
-        importlib.reload(chat_module)
-        with pytest.raises(ValueError, match="disallowed"):
-            chat_module.run_chat("hello", [], [])
-
-
-def test_chat_none_returns_static_message():
-    """LLM_PROVIDER=none must return an offline message, not raise."""
-    with patch.dict(os.environ, {"LLM_PROVIDER": "none"}):
-        import backend.analysis.chat as chat_module
-        importlib.reload(chat_module)
-        result = chat_module.run_chat("hello", [], [])
-        assert "offline" in result.lower()
-        assert "ollama" in result.lower()

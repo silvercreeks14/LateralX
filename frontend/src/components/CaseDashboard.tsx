@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+﻿import { useState, useEffect, useCallback } from 'react'
 import { api } from '../api/client'
 import type { Case, Upload } from '../types'
 import NotesPanel from './NotesPanel'
@@ -128,7 +128,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-white">Case Management</h2>
+          <h2 className="text-sm font-semibold text-slate-900 dark:text-white">Case Management</h2>
           <p className="text-xs text-slate-500 mt-0.5">
             {cases.filter(c => c.status === 'active').length} active · {cases.length} total
           </p>
@@ -143,14 +143,14 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
 
       {/* Status filter tabs */}
       {cases.length > 0 && (
-        <div className="flex gap-1 bg-slate-800 rounded-lg p-1 w-fit">
+        <div className="flex gap-1 bg-slate-100 dark:bg-slate-800 rounded-lg p-1 w-fit">
           {(['all', 'active', 'closed', 'archived'] as StatusFilter[]).map(f => (
             <button
               key={f}
               onClick={() => setStatusFilter(f)}
               className={`text-xs px-3 py-1 rounded-md capitalize transition-colors ${
                 statusFilter === f
-                  ? 'bg-slate-700 text-white font-medium'
+                  ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white font-medium'
                   : 'text-slate-500 hover:text-slate-300'
               }`}
             >
@@ -171,7 +171,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
               onChange={e => setNewTitle(e.target.value)}
               placeholder="e.g. Ransomware Incident April 2026"
               autoFocus
-              className="w-full bg-slate-800 border border-slate-700 text-white rounded-md px-3 py-2 text-sm focus:outline-none placeholder-slate-600"
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-md px-3 py-2 text-sm focus:outline-none placeholder-slate-400 dark:placeholder-slate-600"
               onFocus={e => { e.currentTarget.style.borderColor = '#00F0FF60' }}
               onBlur={e => { e.currentTarget.style.borderColor = '' }}
             />
@@ -183,7 +183,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
               onChange={e => setNewDesc(e.target.value)}
               placeholder="Brief description of this case…"
               rows={2}
-              className="w-full bg-slate-800 border border-slate-700 text-white rounded-md px-3 py-2 text-sm resize-none focus:outline-none placeholder-slate-600"
+              className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-md px-3 py-2 text-sm resize-none focus:outline-none placeholder-slate-400 dark:placeholder-slate-600"
               onFocus={e => { e.currentTarget.style.borderColor = '#00F0FF60' }}
               onBlur={e => { e.currentTarget.style.borderColor = '' }}
             />
@@ -200,7 +200,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
             <button
               type="button"
               onClick={() => setCreating(false)}
-              className="text-xs px-3 py-1.5 border border-slate-700 text-slate-400 rounded-md hover:bg-slate-800"
+              className="text-xs px-3 py-1.5 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 rounded-md hover:bg-slate-100 dark:hover:bg-slate-800"
             >
               Cancel
             </button>
@@ -210,12 +210,12 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
 
       {/* Case list */}
       {cases.length === 0 ? (
-        <div className="bg-slate-900 rounded-lg border border-slate-800 p-8 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-8 text-center">
           <p className="text-sm text-slate-500">No cases yet.</p>
           <p className="text-xs text-slate-600 mt-1">Create a case to organise evidence uploads and analyst notes.</p>
         </div>
       ) : filteredCases.length === 0 ? (
-        <div className="bg-slate-900 rounded-lg border border-slate-800 p-6 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-6 text-center">
           <p className="text-sm text-slate-500">No {statusFilter} cases.</p>
         </div>
       ) : (
@@ -227,14 +227,14 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
               className={`rounded-lg border cursor-pointer transition-all ${
                 selectedId === c.case_id
                   ? 'border-cyan-500/40 bg-cyan-950/10'
-                  : 'border-slate-800 bg-slate-900 hover:border-slate-700'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-700'
               }`}
             >
               <div className="p-4">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <h3 className="text-sm font-semibold text-white truncate">{c.title}</h3>
+                      <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">{c.title}</h3>
                       <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
                         c.status === 'active'   ? 'bg-green-900/30 text-green-400' :
                         c.status === 'closed'   ? 'bg-slate-800 text-slate-500' :
@@ -261,7 +261,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                       <button
                         onClick={e => handleSetStatus(c.case_id, 'closed', e)}
                         disabled={updatingId === c.case_id}
-                        className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:bg-slate-800 disabled:opacity-40"
+                        className="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40"
                         title="Close case"
                       >
                         Close
@@ -300,7 +300,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                     {/* Export court-ready report */}
                     <button
                       onClick={e => handleExportCourtReport(c.case_id, e)}
-                      className="text-xs px-2 py-1 rounded border border-slate-700 text-slate-400 hover:bg-slate-800"
+                      className="text-xs px-2 py-1 rounded border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
                       title="Export court-ready forensic report — black/white, chain-of-custody, attestation block"
                     >
                       Export Report
@@ -333,13 +333,13 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                         {caseUploads.map(u => (
                           <div
                             key={u.id}
-                            className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-slate-800 border border-slate-700"
+                            className="flex items-center justify-between gap-2 px-3 py-2 rounded-md bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700"
                           >
                             <div className="flex items-center gap-2 min-w-0">
                               <svg className="w-3.5 h-3.5 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                               </svg>
-                              <span className="text-xs text-slate-300 font-mono truncate" title={u.filename}>{u.filename}</span>
+                              <span className="text-xs text-slate-700 dark:text-slate-300 font-mono truncate" title={u.filename}>{u.filename}</span>
                               <span className="text-xs text-slate-600 flex-shrink-0">{u.event_count.toLocaleString()} events</span>
                               <span className="text-xs text-slate-700 flex-shrink-0">
                                 {new Date(u.uploaded_at).toLocaleDateString()}

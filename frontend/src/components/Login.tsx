@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { api, setToken } from '../api/client'
 
 interface Props {
@@ -86,12 +86,12 @@ export default function Login({ onLogin }: Props) {
             >
               LX
             </div>
-            <span className="text-3xl font-black text-white tracking-tight">LateralX</span>
+            <span className="text-3xl font-black text-white dark:text-white tracking-tight">LateralX</span>
           </div>
           <p className="text-slate-500 text-sm">Threat Intelligence Platform</p>
         </div>
 
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 shadow-2xl">
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-8 shadow-2xl">
 
           {/* ── Step 1: Credentials ── */}
           {step === 'credentials' && (
@@ -106,8 +106,8 @@ export default function Login({ onLogin }: Props) {
                   value={username}
                   onChange={e => setUsername(e.target.value)}
                   required
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2.5 text-sm
-                             focus:outline-none focus:ring-2 focus:border-transparent placeholder-slate-600"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-4 py-2.5 text-sm
+                             focus:outline-none focus:ring-2 focus:border-transparent placeholder-slate-400 dark:placeholder-slate-600"
                   style={{ '--tw-ring-color': '#00F0FF40' } as React.CSSProperties}
                   onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #00F0FF40'; e.currentTarget.style.borderColor = '#00F0FF60' }}
                   onBlur={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = '' }}
@@ -124,8 +124,8 @@ export default function Login({ onLogin }: Props) {
                   value={password}
                   onChange={e => setPassword(e.target.value)}
                   required
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-2.5 text-sm
-                             focus:outline-none placeholder-slate-600"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-4 py-2.5 text-sm
+                             focus:outline-none placeholder-slate-400 dark:placeholder-slate-600"
                   onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #00F0FF40'; e.currentTarget.style.borderColor = '#00F0FF60' }}
                   onBlur={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = '' }}
                   placeholder="••••••••"
@@ -198,8 +198,8 @@ export default function Login({ onLogin }: Props) {
                     setError(null)
                   }}
                   placeholder="000000"
-                  className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg px-4 py-3 text-xl
-                             tracking-[0.5em] text-center font-mono focus:outline-none placeholder-slate-600"
+                  className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white rounded-lg px-4 py-3 text-xl
+                             tracking-[0.5em] text-center font-mono focus:outline-none placeholder-slate-400 dark:placeholder-slate-600"
                   onFocus={e => { e.currentTarget.style.boxShadow = '0 0 0 2px #00F0FF40'; e.currentTarget.style.borderColor = '#00F0FF60' }}
                   onBlur={e => { e.currentTarget.style.boxShadow = ''; e.currentTarget.style.borderColor = '' }}
                 />

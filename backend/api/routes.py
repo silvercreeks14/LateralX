@@ -10,7 +10,7 @@ import os
 import shutil
 import hashlib
 from pathlib import Path
-from sqlalchemy import text as sa_text
+from sqlalchemy import text as sa_text, func
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, Request, Query
 from fastapi.responses import HTMLResponse, PlainTextResponse, JSONResponse, Response, FileResponse
 from fastapi.security import OAuth2PasswordRequestForm
@@ -20,7 +20,7 @@ from datetime import datetime
 
 from backend.schema import (
     ForensicEvent, RCAResult, UploadResponse, EventSummary,
-    ChatRequest, ChatResponse, BaselineComparisonResult, MitreTechnique, IOC,
+    BaselineComparisonResult, MitreTechnique, IOC,
     Case, CaseCreate, CaseUpdate, Note, NoteCreate, NoteUpdate,
     MLStats, GroundTruthCreate, UserAnomalyScore,
     Upload, SearchResponse, SearchEventResult, SearchNoteResult,
@@ -30,8 +30,9 @@ from backend.ingest.parser import detect_and_parse
 from backend.ingest.pcap_parser import parse_pcap
 from backend.db.models import (
     get_db, EventModel, AnalysisModel, BaselineEventModel,
-    IncidentPatternModel, ChatMessageModel, AuditLogModel, UserModel, init_db,
+    IncidentPatternModel, AuditLogModel, UserModel, init_db,
     CaseModel, NoteModel, MLGroundTruthModel, UploadModel,
+    IpIdentityModel,
 )
 import re as _re
 from backend.api.auth import (
@@ -60,14 +61,14 @@ from backend.analysis import ml_anomaly as ml_mod
 from backend.analysis import ml_synthetic as ml_synth
 from backend.analysis import threat_intel as ti_mod
 from backend.analysis import rules as rules_mod
-from backend.analysis.chat import run_chat
 from backend.analysis.report import generate_report
 from backend.analysis.ioc import iocs_to_csv, iocs_to_stix
 from backend.analysis import attack_classifier as atk_clf
 from backend.analysis.behavioral import analyze_behavior
 from backend.analysis.storyline import build_storyline
-from backend.analysis.lmd_model import run_lmd_model_and_graph, run_lmd_full
-from backend.schema import BenchmarkReport
+from backend.analysis.network_host_correlator import correlate_network_to_host, detect_ddos
+from backend.analysis.ip_identity import IpIdentityTable
+from backend.schema import BenchmarkReport, NetworkAlert
 
 router = APIRouter()
 
@@ -600,7 +601,6 @@ def clear_workspace(
     current_user: UserModel = Depends(get_current_user),
 ):
     try:
-        chat_deleted = db.query(ChatMessageModel).delete(synchronize_session=False)
         # Only clear global workspace — preserve case-tagged events and uploads
         analyses_deleted = db.query(AnalysisModel).filter(AnalysisModel.case_id == None).delete(synchronize_session=False)  # noqa: E711
         events_deleted = db.query(EventModel).filter(EventModel.case_id == None).delete(synchronize_session=False)  # noqa: E711
@@ -609,7 +609,6 @@ def clear_workspace(
         _write_audit(db, "clear", {
             "events_deleted": events_deleted,
             "analyses_deleted": analyses_deleted,
-            "chat_messages_deleted": chat_deleted,
             "uploads_deleted": uploads_deleted,
         }, username=current_user.username)
         return {"status": "cleared"}
@@ -663,26 +662,38 @@ def get_summary(
     case_id=<uuid>  → events for that case only
     case_id absent  → global workspace only (case_id IS NULL)
 
-    This scoping prevents case-tagged events from inflating the global
-    workspace count when the analyst is working without an active case.
+    Uses SQL aggregations instead of loading all rows into Python.
     """
-    q = db.query(EventModel)
-    if case_id:
-        q = q.filter(EventModel.case_id == case_id)
-    else:
-        q = q.filter(EventModel.case_id == None)  # noqa: E711
-    rows = q.all()
-    if not rows:
+    def _case_filter(q):
+        if case_id:
+            return q.filter(EventModel.case_id == case_id)
+        return q.filter(EventModel.case_id == None)  # noqa: E711
+
+    total, ts_min, ts_max = _case_filter(
+        db.query(func.count(EventModel.id), func.min(EventModel.timestamp), func.max(EventModel.timestamp))
+    ).one()
+
+    if not total:
         return EventSummary(total=0, hosts=[], users=[], event_types=[])
+
+    hosts = sorted(
+        h for (h,) in _case_filter(db.query(EventModel.source_host).distinct()).all()
+    )
+    users = sorted(
+        u for (u,) in _case_filter(
+            db.query(EventModel.user).filter(EventModel.user != None).distinct()  # noqa: E711
+        ).all()
+    )
+    event_types = sorted(
+        t for (t,) in _case_filter(db.query(EventModel.event_type).distinct()).all()
+    )
+
     return EventSummary(
-        total=len(rows),
-        hosts=sorted(set(r.source_host for r in rows)),
-        users=sorted(set(r.user for r in rows if r.user)),
-        event_types=sorted(set(r.event_type for r in rows)),
-        time_range={
-            "start": min(r.timestamp for r in rows).isoformat(),
-            "end": max(r.timestamp for r in rows).isoformat(),
-        },
+        total=total,
+        hosts=hosts,
+        users=users,
+        event_types=event_types,
+        time_range={"start": ts_min.isoformat(), "end": ts_max.isoformat()},
     )
 
 
@@ -766,9 +777,6 @@ async def run_analysis(
     enriched_iocs = ti_mod.enrich_iocs(result.iocs)
     result = result.model_copy(update={"iocs": enriched_iocs})
 
-    # LMD AD attack detection is intentionally NOT run here.
-    # Use the dedicated /lmd-analysis endpoint (LMD Analysis section) instead.
-
     _save_iocs_to_memory(result.iocs, db)
     db.add(AnalysisModel(
         patient_zero_candidate=result.patient_zero_candidate,
@@ -797,18 +805,20 @@ async def run_analysis(
     return result
 
 
-@router.post("/lmd-analysis", summary="Standalone AD lateral movement detection")
-def lmd_analysis(
+@router.post("/analyze/ad-rules", summary="AD rule-based attack detection")
+def analyze_ad_rules(
     case_id:   str | None = Query(default=None),
     upload_id: int | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
     """
-    Run the AD-specialized LMD Random Forest on the selected events without
-    triggering a full AI analysis.  Returns structured per-event detections,
-    attack-type counts, and the Cytoscape graph payload used by the frontend.
+    Run 71 rule-based AD detection rules against the selected events.
+    Covers Kerberoasting, DCSync, Lateral Movement, Privilege Escalation,
+    Persistence, Reconnaissance, and Tool Detection categories. Also runs
+    attack chain correlation and tool signature behavioral fingerprinting.
     """
+    from backend.analysis.ad_rules import run_ad_rules
     q = db.query(EventModel).order_by(EventModel.timestamp)
     if upload_id is not None:
         q = q.filter(EventModel.upload_id == upload_id)
@@ -821,38 +831,87 @@ def lmd_analysis(
         raise HTTPException(400, "No events found. Upload a log file first.")
 
     events = [_row_to_event(r) for r in rows]
-    try:
-        result = run_lmd_full(events)
-    except Exception as exc:
-        raise HTTPException(500, f"LMD analysis failed: {exc}")
-
-    _write_audit(db, "lmd_analysis", {
-        "total_events": result["total_events"],
-        "detections":   len(result["detections"]),
-        "attack_counts": result["attack_counts"],
-        "case_id": case_id,
-        "upload_id": upload_id,
+    result = run_ad_rules(events)
+    from backend.analysis.ad_chain_correlator import correlate_attack_chains
+    from backend.analysis.ad_tool_signatures import detect_tool_signatures
+    result["attack_chains"]   = correlate_attack_chains(result["detections"])
+    result["tool_signatures"] = detect_tool_signatures(events)
+    _write_audit(db, "ad_rules_analysis", {
+        "total_events":    result["total_events_analyzed"],
+        "detections":      result["detection_count"],
+        "categories_hit":  result["categories_hit"],
+        "highest_severity":result["highest_severity"],
+        "attack_chains":   len(result["attack_chains"]),
+        "tool_signatures": len(result["tool_signatures"]),
+        "case_id":         case_id,
+        "upload_id":       upload_id,
     }, username=current_user.username)
-
-    return JSONResponse(content={
-        "total_events":  result["total_events"],
-        "detections":    result["detections"],
-        "attack_counts": result["attack_counts"],
-        "graph":         result["graph"],
-        "anomaly_strings": result["anomaly_strings"],
-    })
+    return JSONResponse(content=result)
 
 
-@router.get("/attack-graph-html", summary="Serve LMD attack graph HTML")
-async def get_attack_graph_html():
-    project_root = Path(__file__).resolve().parent.parent.parent
-    graph_path = project_root / "attack_graph.html"
-    if not graph_path.exists():
-        raise HTTPException(
-            status_code=404,
-            detail="attack_graph.html not found. Run a Quick Scan or AI Analysis first to generate it.",
-        )
-    return FileResponse(str(graph_path), media_type="text/html", filename="attack_graph.html")
+@router.post("/analyze/privilege-timeline", summary="AD privilege escalation timeline")
+def analyze_privilege_timeline(
+    case_id:   str | None = Query(default=None),
+    upload_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Build a privilege-event timeline and detect escalation chains from the
+    selected events.  Returns ordered PrivilegeEvents and multi-step
+    EscalationChain records linking account creation → group add → sensitive
+    privilege use.
+    """
+    from backend.analysis.ad_privilege_timeline import build_privilege_timeline
+    q = db.query(EventModel).order_by(EventModel.timestamp)
+    if upload_id is not None:
+        q = q.filter(EventModel.upload_id == upload_id)
+    elif case_id:
+        q = q.filter(EventModel.case_id == case_id)
+    else:
+        q = q.filter(EventModel.case_id == None)  # noqa: E711
+    rows = q.all()
+    if not rows:
+        raise HTTPException(400, "No events found. Upload a log file first.")
+
+    events = [_row_to_event(r) for r in rows]
+    result = build_privilege_timeline(events)
+    _write_audit(db, "privilege_timeline", {
+        "total_privilege_events": result["total_privilege_events"],
+        "escalation_chains":      len(result["escalation_chains"]),
+        "case_id":                case_id,
+        "upload_id":              upload_id,
+    }, username=current_user.username)
+    return JSONResponse(content=result)
+
+
+@router.get("/ad-entities", summary="AD entity intelligence profiling")
+def get_ad_entities(
+    case_id:   str | None = Query(default=None),
+    upload_id: int | None = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: UserModel = Depends(get_current_user),
+):
+    """
+    Profile all users, hosts, and groups observed in the selected events.
+    Returns risk scores, MITRE technique associations, lateral movement targets,
+    and anomaly flags per entity.
+    """
+    from backend.analysis.ad_entity_intel import build_entity_intel
+    q = db.query(EventModel).order_by(EventModel.timestamp)
+    if upload_id is not None:
+        q = q.filter(EventModel.upload_id == upload_id)
+    elif case_id:
+        q = q.filter(EventModel.case_id == case_id)
+    else:
+        q = q.filter(EventModel.case_id == None)  # noqa: E711
+    rows = q.all()
+    if not rows:
+        raise HTTPException(400, "No events found. Upload a log file first.")
+
+    events = [_row_to_event(r) for r in rows]
+    result = build_entity_intel(events)
+    return JSONResponse(content=result)
 
 
 @router.post("/analyze/baseline-compare", response_model=BaselineComparisonResult)
@@ -895,6 +954,7 @@ def compare_with_baseline(
     summary = " ".join(parts) if parts else "No significant deviations detected from baseline."
 
     events = [_row_to_event(r) for r in current_rows]
+    correlate_network_to_host(events)
     techniques = mitre_mod.map_techniques(events)
     graph = build_attack_graph(events)
     current_score = scoring_mod.calculate_severity(events, techniques, graph.get("suspicious_users", []))
@@ -946,6 +1006,9 @@ def ml_quick_scan(
     if not rows:
         raise HTTPException(400, "No events loaded. Upload a file first.")
     events = [_row_to_event(r) for r in rows]
+    exfil_alerts = correlate_network_to_host(events)
+    ddos_alerts  = detect_ddos(events)
+    _save_ip_identity(db, case_id, IpIdentityTable.build(events))
 
     techniques = mitre_mod.map_techniques(events)
     iocs = ioc_mod.extract_iocs(events)
@@ -953,8 +1016,6 @@ def ml_quick_scan(
     suspicious_users = graph.get("suspicious_users", [])
     severity = scoring_mod.calculate_severity(events, techniques, suspicious_users)
     ml_scores = ml_mod.score_all_entities(events)
-    # LMD AD attack detection is intentionally NOT run here.
-    # Use the dedicated /lmd-analysis endpoint (LMD Analysis section) instead.
     clf_result = atk_clf.classify_session(events)
     attack_clf = AttackClassification(
         primary_attack=clf_result.primary_attack,
@@ -965,6 +1026,37 @@ def ml_quick_scan(
         mitre_techniques=clf_result.mitre_techniques,
     )
 
+    network_alerts = [
+        NetworkAlert(
+            alert_type="exfiltration",
+            severity=a.severity,
+            mitre_technique=a.mitre_technique,
+            summary=a.summary(),
+            src_ip=a.src_ip,
+            dst_ip=a.dst_ip,
+            dst_port=a.dst_port,
+            bytes_out=a.bytes_out,
+            host=a.host,
+            user=a.user,
+            process_image=a.process_image,
+            correlated=a.correlated,
+        )
+        for a in exfil_alerts
+    ] + [
+        NetworkAlert(
+            alert_type=f"ddos_{a.direction}",
+            severity=a.severity,
+            mitre_technique=a.mitre_technique,
+            summary=a.summary(),
+            src_ip=a.src_ip,
+            dst_ip=a.dst_ip,
+            dst_port=a.dst_port,
+            connection_count=a.connection_count,
+            distinct_sources=a.distinct_sources,
+        )
+        for a in ddos_alerts
+    ]
+
     result = RCAResult(
         patient_zero_candidate="",
         initial_access_vector="",
@@ -974,8 +1066,7 @@ def ml_quick_scan(
         narrative=(
             "Quick scan complete — MITRE detections, IOCs, severity, ML behavioral anomaly scores, "
             "and attack-type classification are ready. "
-            "Run AI Analysis for the full investigation narrative. "
-            "Use LMD Analysis for AD-specialized lateral movement detection."
+            "Run AI Analysis for the full investigation narrative."
         ),
         analyzed_event_count=len(events),
         windows_analyzed=0,
@@ -984,6 +1075,7 @@ def ml_quick_scan(
         iocs=iocs,
         ml_anomaly_scores=ml_scores,
         attack_classification=attack_clf,
+        network_alerts=network_alerts,
     )
 
     # Save to DB so Export Report works immediately after quick scan
@@ -1061,7 +1153,6 @@ def get_graph(
 ):
     query = db.query(EventModel).order_by(EventModel.timestamp)
     if upload_id is not None:
-        # A specific upload already uniquely identifies the scope — skip case/global filter
         query = query.filter(EventModel.upload_id == upload_id)
     elif case_id:
         query = query.filter(EventModel.case_id == case_id)
@@ -1069,40 +1160,79 @@ def get_graph(
         query = query.filter(EventModel.case_id == None)  # noqa: E711
     if raw_source:
         query = query.filter(EventModel.raw_source == raw_source)
-    rows = query.all()
+    rows = query.limit(50_000).all()
     if not rows:
         raise HTTPException(400, "No events loaded.")
-    return build_attack_graph([_row_to_event(r) for r in rows])
+    _events = [_row_to_event(r) for r in rows]
+    correlate_network_to_host(_events)
+    return build_attack_graph(_events)
 
 
-# ── Chat ───────────────────────────────────────────────────────────────────────
 
-@router.post("/chat", response_model=ChatResponse)
-def chat(
-    req: ChatRequest,
+# ── IP Identity ───────────────────────────────────────────────────────────────
+
+def _save_ip_identity(
+    db,
+    case_id: "str | None",
+    table: IpIdentityTable,
+) -> None:
+    """Persist (or refresh) the IP identity table for a case. Replaces all rows for that case."""
+    db.query(IpIdentityModel).filter(IpIdentityModel.case_id == case_id).delete()
+    for entry in table.all_entries():
+        if not entry.hostname and not entry.users and entry.role == "unknown":
+            continue   # skip bare IPs with no useful attribution
+        db.add(IpIdentityModel(
+            case_id=case_id,
+            ip_address=entry.ip,
+            hostname=entry.hostname or None,
+            users=sorted(entry.users) if entry.users else [],
+            role=entry.role,
+            confidence=entry.confidence,
+            first_seen=entry.first_seen,
+            last_seen=entry.last_seen,
+            source_eids=sorted(entry.source_eids) if entry.source_eids else [],
+            source_count=len(entry.source_eids),
+        ))
+    db.commit()
+
+
+@router.get("/ip-identity")
+def get_ip_identity(
+    case_id: str | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user: UserModel = Depends(get_current_user),
 ):
-    rows = (
-        db.query(EventModel)
-        .filter(EventModel.case_id == None)  # noqa: E711
-        .order_by(EventModel.timestamp)
-        .all()
-    )
-    if not rows:
-        raise HTTPException(400, "No events loaded. Upload a file before chatting.")
-    events = [_row_to_event(r) for r in rows]
-    try:
-        response = run_chat(req.message, req.history, events)
-    except ValueError as exc:
-        raise HTTPException(400, str(exc))
-    except Exception as exc:
-        raise HTTPException(500, f"Chat failed: {exc}")
-    _write_audit(db, "chat", {
-        "message_length": len(req.message),
-        "history_turns": len(req.history),
-    }, username=current_user.username)
-    return ChatResponse(response=response)
+    """
+    Return the IP-to-identity table for this case.
+    Each entry maps an observed IP address to its resolved hostname, users,
+    and classified role (dc / server / workstation / unknown).
+
+    The table is rebuilt automatically whenever an analysis or quick-scan runs.
+    An empty list means no analysis has been run yet for this case.
+    """
+    q = db.query(IpIdentityModel)
+    if case_id:
+        q = q.filter(IpIdentityModel.case_id == case_id)
+    else:
+        q = q.filter(IpIdentityModel.case_id == None)  # noqa: E711
+    rows = q.order_by(IpIdentityModel.ip_address).all()
+    return {
+        "case_id": case_id,
+        "total": len(rows),
+        "entries": [
+            {
+                "ip_address": r.ip_address,
+                "hostname": r.hostname or "",
+                "users": r.users or [],
+                "role": r.role,
+                "confidence": r.confidence,
+                "first_seen": r.first_seen.isoformat() if r.first_seen else None,
+                "last_seen": r.last_seen.isoformat() if r.last_seen else None,
+                "source_eids": r.source_eids or [],
+            }
+            for r in rows
+        ],
+    }
 
 
 # ── IOC Endpoints ─────────────────────────────────────────────────────────────
@@ -1620,8 +1750,8 @@ def deep_clean(
 ):
     """
     Admin-only deep clean:
-      1. Delete all events, analyses, chat messages, baseline events,
-         and incident memory rows (audit log is preserved).
+      1. Delete all events, analyses, baseline events, and incident memory rows
+         (audit log is preserved).
       2. Run VACUUM to reclaim disk space from the SQLite file.
       3. Remove all __pycache__ directories and .pyc files from the project root.
       4. Append a DEEP_CLEAN entry to the immutable audit log.
@@ -1632,7 +1762,6 @@ def deep_clean(
         stats: dict = {}
         stats["events_deleted"] = db.query(EventModel).delete(synchronize_session=False)
         stats["analyses_deleted"] = db.query(AnalysisModel).delete(synchronize_session=False)
-        stats["chat_deleted"] = db.query(ChatMessageModel).delete(synchronize_session=False)
         stats["baseline_deleted"] = db.query(BEM).delete(synchronize_session=False)
         stats["incident_memory_deleted"] = db.query(IncidentPatternModel).delete(synchronize_session=False)
         db.commit()
@@ -1694,16 +1823,34 @@ def list_cases(
     current_user: UserModel = Depends(get_current_user),
 ):
     rows = db.query(CaseModel).order_by(CaseModel.created_at.desc()).all()
-    result = []
-    for row in rows:
-        event_count = db.query(EventModel).filter(EventModel.case_id == row.case_id).count()
-        analysis_count = db.query(AnalysisModel).filter(AnalysisModel.case_id == row.case_id).count()
-        result.append(Case(
+    if not rows:
+        return []
+    case_ids = [r.case_id for r in rows]
+
+    # Fetch all event counts and analysis counts in two bulk queries instead of N+1
+    event_counts = {
+        cid: cnt for cid, cnt in
+        db.query(EventModel.case_id, func.count(EventModel.id))
+          .filter(EventModel.case_id.in_(case_ids))
+          .group_by(EventModel.case_id).all()
+    }
+    analysis_counts = {
+        cid: cnt for cid, cnt in
+        db.query(AnalysisModel.case_id, func.count(AnalysisModel.id))
+          .filter(AnalysisModel.case_id.in_(case_ids))
+          .group_by(AnalysisModel.case_id).all()
+    }
+
+    return [
+        Case(
             case_id=row.case_id, title=row.title, description=row.description,
             status=row.status, created_at=row.created_at, created_by=row.created_by,
-            updated_at=row.updated_at, event_count=event_count, analysis_count=analysis_count,
-        ))
-    return result
+            updated_at=row.updated_at,
+            event_count=event_counts.get(row.case_id, 0),
+            analysis_count=analysis_counts.get(row.case_id, 0),
+        )
+        for row in rows
+    ]
 
 
 @router.get("/cases/{case_id}", response_model=Case)
@@ -2023,7 +2170,7 @@ def get_case_court_report(
         iocs       = _ioc.extract_iocs(events)
         graph      = _bag(events)
         severity   = _sc.calculate_severity(events, techniques, graph.get("suspicious_users", []))
-        ml_scores  = _ml_mod.score_all_users(events)
+        ml_scores  = _ml_mod.score_all_entities(events)
         result = RCAResult(
             patient_zero_candidate="", initial_access_vector="",
             pivot_chain=[], anomalous_events=[],
@@ -2284,7 +2431,9 @@ def verify_ml_prediction(
     else:
         scores_list = raw or []
 
-    user_score = next((s for s in scores_list if s.get("user") == payload.user), None)
+    # ml_scores are serialized from UserAnomalyScore.model_dump() which uses the
+    # field name "entity" — not "user".
+    user_score = next((s for s in scores_list if s.get("entity") == payload.user), None)
     if user_score is None:
         raise HTTPException(404, f"No ML score found for user {payload.user!r} in latest analysis.")
 
@@ -2430,6 +2579,8 @@ def attack_storyline(
     if not rows:
         raise HTTPException(400, "No events loaded. Upload a file first.")
     events = [_row_to_event(r) for r in rows]
+    correlate_network_to_host(events)
+    _save_ip_identity(db, case_id, IpIdentityTable.build(events))
     storyline = build_storyline(events)
     _write_audit(db, "storyline", {
         "event_count": len(events),
@@ -2485,6 +2636,7 @@ def get_detection_rules(
 
     sigma_rules  = rules_mod.generate_sigma_rules(iocs, techniques)
     snort_rules  = rules_mod.generate_snort_rules(iocs)
+    yara_rules   = rules_mod.generate_yara_rules(iocs, techniques)
 
     # Behavioral rules — query the events scoped to this analysis's case (if any)
     event_query = db.query(EventModel)
@@ -2497,16 +2649,36 @@ def get_detection_rules(
 
     if fmt == "text":
         return PlainTextResponse(
-            content=rules_mod.rules_to_text(sigma_rules, snort_rules),
+            content=rules_mod.rules_to_text(sigma_rules, snort_rules, yara_rules),
             media_type="text/plain",
             headers={"Content-Disposition": "attachment; filename=detection_rules.txt"},
+        )
+    if fmt == "sigma":
+        return PlainTextResponse(
+            content=rules_mod.rules_to_text(sigma_rules, []),
+            media_type="text/plain",
+            headers={"Content-Disposition": "attachment; filename=sigma_rules.yml"},
+        )
+    if fmt == "yara":
+        return PlainTextResponse(
+            content="\n\n".join(yara_rules),
+            media_type="text/plain",
+            headers={"Content-Disposition": "attachment; filename=lateralx_rules.yar"},
+        )
+    if fmt == "snort":
+        return PlainTextResponse(
+            content="\n".join(snort_rules),
+            media_type="text/plain",
+            headers={"Content-Disposition": "attachment; filename=snort_rules.rules"},
         )
 
     return {
         "sigma": sigma_rules,
         "snort": snort_rules,
+        "yara": yara_rules,
         "sigma_count": len(sigma_rules),
         "snort_count": len(snort_rules),
+        "yara_count": len(yara_rules),
     }
 
 
@@ -2518,13 +2690,15 @@ async def run_benchmark(
     current_user: UserModel = Depends(get_current_user),
 ):
     """
-    Evaluates all three FIP detection models against an embedded ground-truth
+    Evaluates LateralX detection models against an embedded ground-truth
     benchmark structured after OTRF/Security-Datasets and MITRE ATT&CK KB.
 
-    Returns precision, recall, F1, confusion matrix (LMD), technique coverage
-    (MITRE mapper), and AUC-ROC (Isolation Forest) with an overall grade and
-    gap-analysis recommendations.
+    Returns technique coverage (MITRE mapper) and AUC-ROC (Isolation Forest)
+    with an overall grade and gap-analysis recommendations.
     """
-    from backend.evaluation.evaluator import run_full_benchmark
+    try:
+        from backend.evaluation.evaluator import run_full_benchmark
+    except ImportError:
+        raise HTTPException(503, "Benchmark evaluator not available. Run 'python -m backend.evaluation.build' to generate it.")
     result = await run_in_threadpool(run_full_benchmark)
     return JSONResponse(content=result)

@@ -1,5 +1,5 @@
 """
-Forensic Intelligence Pipeline — FastAPI entry point.
+LateralX — FastAPI entry point.
 Run with: uvicorn main:app --reload
 """
 
@@ -38,8 +38,8 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 
 app = FastAPI(
-    title="Forensic Intelligence API",
-    description="AI-powered digital forensics pipeline",
+    title="LateralX API",
+    description="Post-incident AD forensic investigation platform",
     version="1.0.0",
 )
 
@@ -86,7 +86,6 @@ def _bootstrap_admin() -> None:
 # Initialise the SQLite database and seed default admin on startup
 init_db()
 _bootstrap_admin()
-
 
 if __name__ == "__main__":
     import uvicorn

