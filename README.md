@@ -14,7 +14,7 @@ Designed as a structured investigation tool for cybersecurity analysts and incid
 | **71 AD detection rules** | Kerberoasting, DCSync, Pass-the-Hash/Ticket, Golden/Silver Ticket, LDAP enumeration, lateral movement, persistence, defense evasion, and more |
 | **Unsupervised ML** | Isolation Forest trained on a synthetic baseline grounded in LANL 2015, CERT v6.2, and OTRF/Mordor datasets; flags statistical outliers without labeled attack data |
 | **Attack chain correlation** | Groups detections by actor across tactics and builds multi-step attack narratives in MITRE tactic order |
-| **Behavioral analysis** | 8 statistical checks: hourly spikes, lateral velocity, auth-failure bursts, off-hours privilege use, Kerberoasting patterns, group modifications, account creation chains, NTLM spikes |
+| **Behavioral analysis** | 15 deterministic checks across 4 categories: statistical anomalies (hourly spikes, lateral velocity, auth-failure bursts, off-hours privilege, Kerberoasting, group modification bursts, account creation chains, NTLM spikes), credential access (NTLM brute-force, Pass-the-Hash, LSASS correlation, Golden/Silver Ticket), execution (WMI shell spawn), and high-confidence single-event rules (shadow copy deletion, boot recovery disabled, CertUtil/BITSAdmin downloads, MSHTA/Regsvr32 remote exec, encoded PowerShell, Mimikatz, DCSync, LSASS dump) |
 | **Attack graph** | Interactive Cytoscape.js visualization with kill-chain overlay, degree-weighted node sizing, node search, and PNG export |
 | **Privilege timeline** | Chronological escalation chain reconstruction from Windows Security EIDs (account creation → group membership → privilege use) |
 | **Entity intelligence** | Per-entity (user / host / group) risk scoring (0–100), MITRE technique associations, anomaly flags |
@@ -38,7 +38,7 @@ Browser (React + TypeScript + Tailwind)
 FastAPI backend (Python 3.11+)
 ├── Ingest layer      — parser.py  (CSV / JSONL / PCAP → ForensicEvent)
 ├── Detection engine  — ad_rules.py  (71 rules, 7 categories)
-│                       behavioral.py  (8 statistical checks)
+│                       behavioral.py  (15 deterministic checks)
 │                       ml_anomaly.py  (Isolation Forest)
 │                       attack_classifier.py  (supervised, 10 classes)
 ├── Correlation       — ad_chain_correlator.py  (multi-tactic chains)
@@ -161,9 +161,10 @@ After detection, `ad_chain_correlator.py` groups individual rule hits by actor a
 | Format | Parser details |
 |---|---|
 | **Sysmon JSONL** | Velociraptor artifact export; EID 1/3/10/4624/4625/4648/4662/4688/4769 fully parsed |
+| **Windows Event Viewer CSV** | `Get-WinEvent \| Export-Csv` output (`TimeCreated`, `MachineName`, `Id`, `Message`); deep-parses multi-line Sysmon Message blocks for Image, CommandLine, ParentImage, ParentCommandLine, User, GrantedAccess, UtcTime; tagged `VELOCIRAPTOR` source |
 | **Timesketch JSONL** | `timestamp`, `message`, `source`, `username`, `hostname` field mapping |
 | **Plaso L2T CSV** | Legacy timeline export; date/time/source/message columns |
-| **Generic CSV** | Auto-detection of host/user/timestamp columns via priority field lists |
+| **Generic CSV** | Auto-detection of host/user/timestamp/event-id columns via priority field lists; case-insensitive header matching |
 | **PCAP / PCAPNG** | Flow extraction via PyShark; protocol/port analysis, exfiltration detection |
 
 All formats go through a normalisation layer that strips Windows Event Log boilerplate, reduces token count by 40–60%, and applies consistent entity resolution (domain suffix stripping, system account filtering).
