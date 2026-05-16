@@ -240,6 +240,7 @@ export default function ADDetectionPanel({ activeCaseId, uploads, onResult }: Pr
   const [selectedUploadId, setSelectedUploadId] = useState<number | null>(null)
   const [filterCat, setFilterCat] = useState<string>('all')
   const [filterSev, setFilterSev] = useState<string>('all')
+  const [filterConf, setFilterConf] = useState<'all' | 'medium' | 'high'>('all')
 
   const run = async () => {
     setLoading(true); setError(null)
@@ -258,6 +259,8 @@ export default function ADDetectionPanel({ activeCaseId, uploads, onResult }: Pr
   const filtered = detections.filter(d => {
     if (filterCat !== 'all' && d.category !== filterCat) return false
     if (filterSev !== 'all' && d.severity !== filterSev) return false
+    if (filterConf === 'medium' && d.confidence === 'low') return false
+    if (filterConf === 'high'   && d.confidence !== 'high') return false
     return true
   })
 
@@ -382,6 +385,23 @@ export default function ADDetectionPanel({ activeCaseId, uploads, onResult }: Pr
                 {['all', ...severities].map(s => (
                   <button key={s} onClick={() => setFilterSev(s)} className={filterBtn(filterSev === s)}>
                     {s === 'all' ? 'All' : s}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-slate-500">Confidence:</span>
+                {(['all', 'medium', 'high'] as const).map(c => (
+                  <button
+                    key={c}
+                    onClick={() => setFilterConf(c)}
+                    className={filterBtn(filterConf === c)}
+                    title={
+                      c === 'all'    ? 'Show all confidence levels' :
+                      c === 'medium' ? 'Hide low-confidence detections' :
+                                       'Show only high-confidence detections'
+                    }
+                  >
+                    {c === 'all' ? 'All' : c === 'medium' ? 'Med+' : 'High'}
                   </button>
                 ))}
               </div>

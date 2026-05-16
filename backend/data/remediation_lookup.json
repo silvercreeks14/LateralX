@@ -1,0 +1,862 @@
+[
+  {
+    "technique_id": "T1558.001",
+    "technique_name": "Golden Ticket",
+    "severity": "critical",
+    "immediate_actions": [
+      "Reset the KRBTGT account password TWICE with a minimum 10-hour gap between resets — this invalidates all forged Golden Tickets domain-wide: Set-ADAccountPassword -Identity krbtgt -Reset -NewPassword (ConvertTo-SecureString -AsPlainText 'Pass1!' -Force) — repeat with a different password after 10 hours",
+      "Audit EID 4769 for RC4 encryption (0x17) with anomalous ticket options (0x40810000) or lifetimes exceeding 10 hours: wevtutil qe Security \"/q:*[EventData[Data[@Name='TicketEncryptionType']='0x17']]\" /f:text /c:200",
+      "Enable Kerberos service ticket audit immediately: auditpol /set /subcategory:\"Kerberos Service Ticket Operations\" /success:enable /failure:enable",
+      "Identify all systems where forged tickets may have been used by cross-referencing EID 4624/4648 logon events from the compromise window against non-DC source IPs"
+    ],
+    "short_term_actions": [
+      "Deploy Microsoft Defender for Identity (MDI) or equivalent to detect anomalous Kerberos ticket requests in real time",
+      "Enforce AES-only Kerberos encryption for all privileged accounts: Set-ADUser -Identity <user> -KerberosEncryptionType AES128,AES256",
+      "Audit all privileged group memberships for unauthorized changes since the earliest known compromise timestamp",
+      "Rotate ALL service account and admin account passwords — treat the entire domain credential store as compromised"
+    ],
+    "prevention": [
+      "Restrict access to Domain Controllers to Tier 0 accounts only via a tiered administration model (Tier 0/1/2)",
+      "Rotate the KRBTGT password every 180 days as standard operating procedure",
+      "Enable Protected Users security group for all privileged accounts to disable RC4 downgrade attacks",
+      "Deploy Privileged Access Workstations (PAWs) for all Tier 0 administrative tasks"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All domain accounts — KRBTGT compromise allows impersonation of any user in the domain"
+  },
+  {
+    "technique_id": "T1558.002",
+    "technique_name": "Silver Ticket",
+    "severity": "critical",
+    "immediate_actions": [
+      "Reset the computer account password for each affected host to invalidate Silver Tickets forged with the machine account hash: Reset-ComputerMachinePassword (run on affected host, or use: Set-ADComputer -Identity <host> -KerberosEncryptionType AES128,AES256)",
+      "Reset passwords for all service accounts targeted by Silver Tickets — check service names (CIFS, HTTP, RPCSS, LDAP, HOST) in EID 4769 ServiceName field",
+      "Audit EID 4769 events WITHOUT a preceding EID 4768 from the same user within 20 minutes — this TGT-bypass pattern is the primary Silver Ticket indicator: wevtutil qe Security \"/q:*[EventData[Data[@Name='ServiceName']!='krbtgt']]\" /f:text | findstr /i 0x17",
+      "Enable Kerberos logging: auditpol /set /subcategory:\"Kerberos Authentication Service\" /success:enable /failure:enable"
+    ],
+    "short_term_actions": [
+      "Enable AES-only encryption for all service accounts and computer accounts to eliminate RC4 as a Silver Ticket vector",
+      "Deploy Microsoft Defender for Identity to detect forged service ticket attacks via Kerberos behavioral analytics",
+      "Audit all SPNs to identify which services were targeted: Get-ADComputer -Filter * -Properties ServicePrincipalName | Where {$_.ServicePrincipalName}",
+      "Review all access logs for targeted services during the incident window for signs of unauthorized data access or lateral movement"
+    ],
+    "prevention": [
+      "Add all service accounts to the Protected Users security group — disables RC4 and enforces AES",
+      "Rotate all computer account passwords and service account passwords every 90 days",
+      "Segment services so a Silver Ticket for one service cannot pivot to other high-value services",
+      "Configure Kerberos Armoring (FAST) via Group Policy to protect ticket exchange"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "Service accounts and computer accounts for targeted services (CIFS, HTTP, LDAP, RPCSS, HOST)"
+  },
+  {
+    "technique_id": "T1558.003",
+    "technique_name": "Kerberoasting",
+    "severity": "high",
+    "immediate_actions": [
+      "Identify all SPN-bearing accounts immediately: Get-ADUser -Filter {ServicePrincipalName -ne '$null'} -Properties ServicePrincipalName,PasswordLastSet | Select Name,SamAccountName,PasswordLastSet,ServicePrincipalName | Export-Csv spn_accounts.csv",
+      "Rotate passwords for ALL SPN-bearing accounts immediately — assume all RC4 hashes have been captured and are being cracked offline",
+      "Detect Kerberoasting activity via EID 4769 with RC4 (0x17) and unusual volume: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4769} | Where {$_.Message -like '*0x17*'} | Group {$_.Properties[2].Value} | Sort Count -Descending | Select -First 20",
+      "Enable Kerberos service ticket audit: auditpol /set /subcategory:\"Kerberos Service Ticket Operations\" /success:enable /failure:enable"
+    ],
+    "short_term_actions": [
+      "Enforce AES-256 encryption for all service accounts: Set-ADUser -Identity <svc_acct> -KerberosEncryptionType AES128,AES256 — removes RC4 as a crackable hash type",
+      "Enforce minimum 25-character randomly-generated passwords for all service accounts",
+      "Migrate service accounts to Group Managed Service Accounts (gMSA) — auto-rotating 240-character passwords make Kerberoasting computationally infeasible",
+      "Deploy a honeypot SPN account with alerting on any TGS request against it"
+    ],
+    "prevention": [
+      "Use Group Managed Service Accounts (gMSA) for all services — gMSA passwords rotate automatically every 30 days",
+      "Audit SPN registrations quarterly — any user-attached SPN is a Kerberoasting target",
+      "Create a standing SIEM detection: EID 4769 with encryption type 0x17 from a non-service-account source, volume >10 per minute"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All Active Directory user accounts with registered Service Principal Names (SPNs)"
+  },
+  {
+    "technique_id": "T1558.004",
+    "technique_name": "AS-REP Roasting",
+    "severity": "high",
+    "immediate_actions": [
+      "Identify all accounts with pre-authentication disabled: Get-ADUser -Filter {DoesNotRequirePreAuth -eq $True} -Properties DoesNotRequirePreAuth | Select Name,SamAccountName,DistinguishedName",
+      "Re-enable Kerberos pre-authentication for all identified accounts: Set-ADUser -Identity <user> -KerberosPreAuthRequired $True",
+      "Rotate passwords for all accounts that had pre-authentication disabled — their AS-REP hashes have been captured",
+      "Search for GetNPUsers, Rubeus asreproast, or bulk EID 4768 requests with RC4 pre-auth type as Kerberoasting tool indicators"
+    ],
+    "short_term_actions": [
+      "Audit all accounts with UF_DONT_REQUIRE_PREAUTH flag quarterly — this flag should never be set on standard accounts",
+      "Set minimum 20+ character passwords for any account that legitimately requires pre-auth disabled",
+      "Enable EID 4768 audit: auditpol /set /subcategory:\"Kerberos Authentication Service\" /failure:enable"
+    ],
+    "prevention": [
+      "Never disable Kerberos pre-authentication unless operationally required — document and review all exceptions quarterly",
+      "Create a SIEM alert for account modification (EID 4738) that disables pre-authentication: flag UserParameters changes setting UF_DONT_REQUIRE_PREAUTH"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All Active Directory accounts with Kerberos pre-authentication disabled (DoesNotRequirePreAuth = True)"
+  },
+  {
+    "technique_id": "T1550.002",
+    "technique_name": "Pass the Hash",
+    "severity": "high",
+    "immediate_actions": [
+      "Add all privileged accounts to the Protected Users security group to disable NTLM: Add-ADGroupMember -Identity 'Protected Users' -Members <admin_account>",
+      "Restrict outgoing NTLM via GPO immediately: Computer Config > Windows Settings > Security Settings > Local Policies > Security Options > 'Network security: Restrict NTLM: Outgoing NTLM traffic to remote servers' = Deny All",
+      "Set NTLM compatibility to NTLMv2 only: reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa /v LmCompatibilityLevel /t REG_DWORD /d 5 /f",
+      "Rotate NTLM credentials (passwords) for ALL accounts in the lateral movement chain — the NTLM hash is the credential"
+    ],
+    "short_term_actions": [
+      "Enable Credential Guard via Group Policy: Computer Config > Admin Templates > System > Device Guard > Turn On Virtualization Based Security > enable with Secure Boot and DMA protection",
+      "Enable LAPS on all workstations to randomize local admin passwords per machine, eliminating shared local credential lateral movement",
+      "Audit NTLM usage across the environment to find remaining NTLM dependencies before enforcing full restriction",
+      "Review EID 4624 Logon Type 3 and EID 4648 (Explicit Credential Use) for anomalous lateral movement from the incident window"
+    ],
+    "prevention": [
+      "Deploy Windows Defender Credential Guard on all supported systems (Windows 10/Server 2016+)",
+      "Enforce Kerberos-only authentication for all internal services — disable NTLM on Domain Controllers via GPO",
+      "Implement network microsegmentation to limit the blast radius of credential theft",
+      "Use tiered administration model so PTH in one tier cannot compromise another"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All accounts whose NTLM hashes were cached on compromised systems (local accounts, domain accounts with interactive logon history)"
+  },
+  {
+    "technique_id": "T1550.003",
+    "technique_name": "Pass the Ticket",
+    "severity": "critical",
+    "immediate_actions": [
+      "Purge all Kerberos tickets on every affected host: klist purge — must be run on each compromised system to invalidate in-memory tickets",
+      "If a Golden Ticket is the ticket source, reset KRBTGT password TWICE with a 10-hour gap",
+      "If Silver Tickets are suspected, reset the service account passwords and computer account passwords for targeted services",
+      "Search for Rubeus, mimikatz kerberos::ptt, .kirbi, and .ccache files: Get-ChildItem -Recurse -Include *.kirbi,*.ccache C:\\ 2>$null | Select FullName,LastWriteTime"
+    ],
+    "short_term_actions": [
+      "Enable Kerberos ticket monitoring: audit EID 4768 (TGT) and EID 4769 (TGS) — tickets used without a prior TGT request indicate Pass-the-Ticket",
+      "Deploy Microsoft Defender for Identity — Pass-the-Ticket detection is built-in via Kerberos anomaly analysis",
+      "Restrict Kerberos ticket lifetime to 8 hours maximum in Default Domain Policy"
+    ],
+    "prevention": [
+      "Enable Protected Users security group for all privileged accounts (enforces AES-only, 4-hour ticket lifetime)",
+      "Deploy PAM with just-in-time privilege so privileged Kerberos tickets are never left persisted in memory",
+      "Segment the network so stolen tickets cannot reach high-value services from attacker-controlled hosts"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "Accounts whose Kerberos tickets were stolen from memory on compromised systems — typically privileged accounts"
+  },
+  {
+    "technique_id": "T1003.001",
+    "technique_name": "LSASS Memory Dumping",
+    "severity": "critical",
+    "immediate_actions": [
+      "Enable LSASS Protected Process Light (PPL) immediately: reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa /v RunAsPPL /t REG_DWORD /d 1 /f — requires reboot; blocks most LSASS dump tools",
+      "Rotate ALL domain credentials — treat every password cached in LSASS on affected systems as compromised: service accounts, domain admin accounts, and any user with an interactive logon in the past 90 days",
+      "Search for LSASS dump files: Get-ChildItem -Path C:\\ -Recurse -Include lsass*.dmp,lsass.exe.* -ErrorAction SilentlyContinue — quarantine any found",
+      "Review Sysmon EID 10 (process access on lsass.exe) from the incident window to identify all dump tool processes: Get-WinEvent -Path *.evtx | Where {$_.Id -eq 10 -and $_.Properties[4].Value -like '*lsass*'}"
+    ],
+    "short_term_actions": [
+      "Enable Windows Defender Credential Guard on all systems (requires UEFI Secure Boot + VBS)",
+      "Enable ASR rule to block credential stealing from LSASS: Set-MpPreference -AttackSurfaceReductionRules_Ids 9e6c4e1f-7d60-472f-ba1a-a39ef669e4b0 -AttackSurfaceReductionRules_Actions Enabled",
+      "Disable WDigest to prevent plaintext credential caching: reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest /v UseLogonCredential /t REG_DWORD /d 0 /f",
+      "Deploy LAPS for all workstations — prevents lateral movement via shared local admin credentials"
+    ],
+    "prevention": [
+      "Enable Credential Guard and PPL as a baseline configuration for all Windows endpoints via Group Policy",
+      "Restrict local administrator rights — only accounts that operationally require them should have them",
+      "Create Sysmon alerting rule for EID 10 (process access) targeting lsass.exe from non-system processes"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All accounts with active sessions or cached credentials on the compromised host at the time of the dump"
+  },
+  {
+    "technique_id": "T1003.006",
+    "technique_name": "DCSync",
+    "severity": "critical",
+    "immediate_actions": [
+      "Audit who holds DS-Replication-Get-Changes-All rights immediately: (Get-Acl 'AD:\\DC=yourdomain,DC=com').Access | Where {$_.ObjectType -eq '1131f6ad-9c07-11d1-f79f-00c04fc2dcd2'} | Select IdentityReference,AccessControlType",
+      "Remove unauthorized replication rights via ADSI Edit: navigate to domain root object > Properties > Security > Advanced > remove DS-Replication-Get-Changes-All from any non-DC account",
+      "Reset the KRBTGT password TWICE with a 10-hour gap — DCSync recovers the krbtgt hash enabling Golden Ticket attacks",
+      "Rotate ALL privileged account passwords in Tier 0 (Domain Admins, Enterprise Admins, Schema Admins) immediately — treat full domain credential store as compromised"
+    ],
+    "short_term_actions": [
+      "Enable Directory Service Access auditing: auditpol /set /subcategory:\"Directory Service Access\" /success:enable — generates EID 4662 for replication right use",
+      "Create a SIEM rule: EID 4662 with ObjectType 1131f6ad (Replicating Directory Changes All) from any non-Domain-Controller IP is a DCSync alert",
+      "Deploy Microsoft Defender for Identity — DCSync detection is a built-in alert (fires on EID 4662 from non-DC)",
+      "Review all accounts granted replication rights in the past 90 days via EID 4728/4756"
+    ],
+    "prevention": [
+      "Limit DS-Replication-Get-Changes-All rights to Domain Controller computer accounts only — never user accounts",
+      "Deploy tiered admin model ensuring no account used interactively on workstations holds DC replication rights",
+      "Standing SIEM alert: EID 4662 with ObjectType 1131f6ad from a non-DC source IP"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "Entire Active Directory — DCSync recovers all password hashes in the domain including the KRBTGT hash"
+  },
+  {
+    "technique_id": "T1207",
+    "technique_name": "Rogue Domain Controller (Skeleton Key)",
+    "severity": "critical",
+    "immediate_actions": [
+      "Reboot all Domain Controllers IMMEDIATELY — the Skeleton Key patch is in-memory only and does not survive a reboot: this is the fastest remediation for the active backdoor",
+      "After reboot, reset KRBTGT password TWICE (10-hour gap) and rotate ALL privileged account passwords — attacker likely captured hashes before deploying the skeleton key",
+      "Search for misc::skeleton execution artifacts in EDR/Sysmon telemetry from the incident window: look for lsass.exe memory write operations from unexpected processes",
+      "Audit all Domain Controller logon events since the earliest compromise timestamp for logins using unusual credentials (skeleton key default password is 'mimikatz')"
+    ],
+    "short_term_actions": [
+      "Enable LSASS PPL on all Domain Controllers: reg add HKLM\\SYSTEM\\CurrentControlSet\\Control\\Lsa /v RunAsPPL /t REG_DWORD /d 1 /f",
+      "Enable Credential Guard on all Domain Controllers (Server 2016+)",
+      "Deploy integrity monitoring on the LSASS module list to detect future in-memory patching attempts",
+      "Review all domain authentications since the compromise window — any successful auth with invalid credentials indicates active skeleton key use"
+    ],
+    "prevention": [
+      "Deploy Microsoft Defender for Identity — Skeleton Key detection monitors for LSASS patching patterns",
+      "Enable Secure Boot and TPM on all Domain Controllers to ensure boot chain integrity",
+      "Restrict physical and hypervisor-level access to Domain Controllers to Tier 0 administrators only"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All domain accounts — Skeleton Key allows authentication as any user with a master backdoor password while leaving normal passwords functional"
+  },
+  {
+    "technique_id": "T1021.001",
+    "technique_name": "Remote Desktop Protocol",
+    "severity": "medium",
+    "immediate_actions": [
+      "Block direct inbound RDP at the perimeter firewall — all RDP must route through a jump server or RD Gateway: New-NetFirewallRule -DisplayName 'Block Direct RDP' -Direction Inbound -Protocol TCP -LocalPort 3389 -Action Block",
+      "Enable Network Level Authentication (NLA): Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server\\WinStations\\RDP-Tcp' -Name SecurityLayer -Value 2 -Type DWord",
+      "Audit all RDP sessions in the incident window (Logon Type 10): Get-WinEvent -FilterHashtable @{LogName='Security';Id=4624} | Where {$_.Properties[8].Value -eq 10} | Select TimeCreated,@{N='User';E={$_.Properties[5].Value}},@{N='SourceIP';E={$_.Properties[18].Value}}",
+      "Disable RDP on all hosts where it is not operationally required: Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Terminal Server' -Name fDenyTSConnections -Value 1"
+    ],
+    "short_term_actions": [
+      "Deploy Microsoft Remote Desktop Gateway (RD Gateway) as the sole RDP entry point — enforces MFA and provides centralized audit logging",
+      "Restrict RDP by source IP at Windows Firewall: New-NetFirewallRule -DisplayName 'RDP Jump Server Only' -Direction Inbound -Protocol TCP -LocalPort 3389 -RemoteAddress <jumpserver_ip> -Action Allow",
+      "Enable EID 4778 (session reconnect) and EID 4779 (session disconnect) forwarding to SIEM"
+    ],
+    "prevention": [
+      "Enforce MFA for all RDP sessions via RD Gateway or Conditional Access",
+      "Implement JIT (Just-In-Time) access for RDP via Microsoft Defender for Cloud or a PAM solution",
+      "Use Privileged Access Workstations (PAWs) for all RDP-based administration"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "All accounts with Remote Desktop Users group membership on affected hosts: Get-LocalGroupMember -Group 'Remote Desktop Users'"
+  },
+  {
+    "technique_id": "T1021.002",
+    "technique_name": "SMB/Windows Admin Shares",
+    "severity": "medium",
+    "immediate_actions": [
+      "Enable SMB signing on all systems to prevent relay attacks: Set-SmbServerConfiguration -RequireSecuritySignature $True -Force && Set-SmbClientConfiguration -RequireSecuritySignature $True -Force",
+      "Audit admin share connections from the incident window: Get-WinEvent -FilterHashtable @{LogName='Security';Id=5140} | Where {$_.Properties[6].Value -match 'ADMIN\\$|C\\$|IPC\\$|D\\$'} | Select TimeCreated,@{N='User';E={$_.Properties[1].Value}},@{N='Share';E={$_.Properties[6].Value}},@{N='SourceIP';E={$_.Properties[8].Value}}",
+      "Terminate all active unauthorized admin share sessions: net session \\\\<attacker_ip> /delete",
+      "Block SMB (TCP 445) between workstations at the firewall — workstations should communicate with file servers, not each other"
+    ],
+    "short_term_actions": [
+      "Disable admin shares on workstations where not required: reg add HKLM\\SYSTEM\\CurrentControlSet\\Services\\LanmanServer\\Parameters /v AutoShareWks /t REG_DWORD /d 0 /f",
+      "Enable SMB file share audit: auditpol /set /subcategory:\"File Share\" /success:enable /failure:enable — generates EID 5140/5145",
+      "Deploy LAPS on all workstations so local admin passwords are unique per machine"
+    ],
+    "prevention": [
+      "Implement host-based firewall rules blocking lateral SMB (TCP 445/139) between endpoint segments via GPO",
+      "Require Kerberos authentication for all SMB connections — disable NTLM fallback for SMB",
+      "Audit admin share usage as a standing SIEM detection: EID 5140 with share name matching ADMIN$/C$/D$ from non-standard source IPs"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts used to connect to admin shares — typically local administrators or domain admins on affected hosts"
+  },
+  {
+    "technique_id": "T1021.006",
+    "technique_name": "Windows Remote Management",
+    "severity": "medium",
+    "immediate_actions": [
+      "Disable WinRM on all hosts where it is not operationally required: Disable-PSRemoting -Force && Stop-Service winrm -PassThru | Set-Service -StartupType Disabled",
+      "Restrict WinRM access to authorized management hosts via firewall: New-NetFirewallRule -DisplayName 'WinRM Allow Mgmt Only' -Direction Inbound -Protocol TCP -LocalPort 5985,5986 -RemoteAddress <mgmt_host_ip> -Action Allow",
+      "Audit all PowerShell remoting sessions in the incident window: Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operational';Id=400,403} | Select TimeCreated,@{N='Details';E={$_.Message.Substring(0,200)}}",
+      "Enumerate active WinRM sessions: Get-WSManInstance -ResourceURI shell -Enumerate | Select Owner,ProcessID,ShellRunTime"
+    ],
+    "short_term_actions": [
+      "Enable WinRM over HTTPS only (port 5986) with certificate authentication — disable HTTP (port 5985): winrm set winrm/config/listener @{Transport='HTTPS';CertificateThumbprint='<thumbprint>'}",
+      "Configure WinRM to require Kerberos only: winrm set winrm/config/service/auth @{Kerberos='true';Basic='false';Negotiate='false'}",
+      "Enable PowerShell Script Block Logging to capture all WinRM-delivered commands"
+    ],
+    "prevention": [
+      "Use JEA (Just Enough Administration) endpoints to restrict which cmdlets can run via WinRM",
+      "Enforce Constrained Language Mode for non-administrative WinRM sessions",
+      "Forward WinRM connection events to SIEM and alert on connections from non-management hosts"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts with WinRM access on affected hosts — check via: (Get-PSSessionConfiguration -Name Microsoft.PowerShell).Permission"
+  },
+  {
+    "technique_id": "T1047",
+    "technique_name": "Windows Management Instrumentation",
+    "severity": "medium",
+    "immediate_actions": [
+      "Enable WMI Activity logging: auditpol /set /subcategory:\"WMI Activity\" /success:enable — generates events in Microsoft-Windows-WMI-Activity/Operational",
+      "Enumerate all WMI subscriptions for persistence (common technique): Get-WMIObject -Namespace root\\subscription -Class __EventFilter | Select Name,Query; Get-WMIObject -Namespace root\\subscription -Class __EventConsumer | Select Name; Get-WMIObject -Namespace root\\subscription -Class __FilterToConsumerBinding",
+      "Remove any unauthorized WMI subscriptions: Get-WMIObject -Namespace root\\subscription -Class __FilterToConsumerBinding | Remove-WmiObject",
+      "Block remote WMI access at the firewall between workstations: block TCP 135 (RPC Endpoint Mapper) and DCOM dynamic ports (49152-65535)"
+    ],
+    "short_term_actions": [
+      "Deploy Sysmon with WMI event subscription monitoring (Sysmon EID 19, 20, 21) to detect persistent WMI consumers",
+      "Restrict WMI namespace permissions to administrators only: use wmimgmt.msc to audit and restrict namespace security",
+      "Review Microsoft-Windows-WMI-Activity/Operational log for lateral WMI execution entries from the incident window"
+    ],
+    "prevention": [
+      "Apply WDAC policies to block unauthorized WMI consumers",
+      "Segment the network so workstations cannot initiate WMI connections to other workstations",
+      "Create SIEM detections for WMI subscription creation (Sysmon EID 19/20/21) from non-admin accounts"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts with WMI remote access rights — restrict via DCOM security settings in Component Services (dcomcnfg)"
+  },
+  {
+    "technique_id": "T1059.001",
+    "technique_name": "PowerShell",
+    "severity": "medium",
+    "immediate_actions": [
+      "Enable PowerShell Script Block Logging: reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging /v EnableScriptBlockLogging /t REG_DWORD /d 1 /f",
+      "Enable PowerShell Module Logging: reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ModuleLogging /v EnableModuleLogging /t REG_DWORD /d 1 /f && reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ModuleLogging\\ModuleNames /v * /t REG_SZ /d * /f",
+      "Disable PowerShell v2 to prevent AMSI and logging bypass: Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root -NoRestart",
+      "Review all EID 4104 (Script Block logged) events from the incident window for encoded commands and malicious payloads: Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operational';Id=4104} | Where {$_.Message -like '*encodedcommand*' -or $_.Message -like '*frombase64*'}"
+    ],
+    "short_term_actions": [
+      "Enforce AllSigned or RemoteSigned execution policy: Set-ExecutionPolicy AllSigned -Scope LocalMachine -Force",
+      "Enable PowerShell Constrained Language Mode for non-administrative accounts via AppLocker or WDAC",
+      "Enable PowerShell Transcription: reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\Transcription /v EnableTranscripting /t REG_DWORD /d 1 /f"
+    ],
+    "prevention": [
+      "Deploy AppLocker or WDAC policies restricting which accounts can run PowerShell.exe and PowerShell_ISE.exe",
+      "Route all administrative PowerShell to JEA endpoints to limit available cmdlets per role",
+      "Forward all EID 4103/4104 Script Block events to SIEM with high-entropy string detection rules"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts that executed malicious PowerShell during the incident — verify via EID 4103/4104 SubjectUserName field"
+  },
+  {
+    "technique_id": "T1059.003",
+    "technique_name": "Windows Command Shell",
+    "severity": "medium",
+    "immediate_actions": [
+      "Enable process creation audit with command line logging: auditpol /set /subcategory:\"Process Creation\" /success:enable && reg add HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Audit /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f",
+      "Review all cmd.exe executions from the incident window for malicious command sequences: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4688} | Where {$_.Properties[5].Value -like '*cmd.exe*'} | Select TimeCreated,@{N='CmdLine';E={$_.Properties[8].Value}},@{N='User';E={$_.Properties[1].Value}}",
+      "Search for cmd.exe /c commands spawned from unusual parent processes (Office, browsers, web servers) via Sysmon EID 1",
+      "Identify and quarantine any scripts or batch files dropped during the incident: Get-ChildItem -Recurse -Include *.bat,*.cmd C:\\Windows\\Temp,C:\\Users -ErrorAction SilentlyContinue | Where {$_.LastWriteTime -gt (Get-Date).AddDays(-14)}"
+    ],
+    "short_term_actions": [
+      "Deploy Sysmon with parent-child process relationship logging to detect cmd.exe spawned from abnormal parents",
+      "Implement AppLocker rules restricting cmd.exe execution for end users",
+      "Alert on cmd.exe /c invocations containing download indicators: certutil, bitsadmin, curl, wget, powershell -enc"
+    ],
+    "prevention": [
+      "Block cmd.exe for standard users via AppLocker Publisher or Path rules",
+      "Use WDAC to enforce script execution restrictions",
+      "Deploy EDR with behavioral detection for command-shell abuse (living-off-the-land patterns)"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts that executed malicious commands — check EID 4688 SubjectUserName from the incident window"
+  },
+  {
+    "technique_id": "T1027",
+    "technique_name": "Obfuscated Files or Information",
+    "severity": "medium",
+    "immediate_actions": [
+      "Verify AMSI is operational on all affected hosts — check AMSI provider registration: Get-MpThreatDetection | Select AMSIProtectionTriggered, ThreatName | Where {$_.AMSIProtectionTriggered}",
+      "Enable Deep Script Block Logging to capture obfuscated payload content at execution time: reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows\\PowerShell\\ScriptBlockLogging /v EnableScriptBlockInvocationLogging /t REG_DWORD /d 1 /f",
+      "Extract and analyze all EID 4104 Script Block events from the incident window — look for: fromBase64String, -join [char], AmsiUtils, amsiinitfailed, [System.Reflection.Assembly]::Load",
+      "Scan affected systems for encoded payloads: Get-ChildItem -Recurse C:\\Windows\\Temp,C:\\Users -Include *.ps1,*.vbs,*.js | Where {$_.Length -gt 5000} | Select FullName,LastWriteTime"
+    ],
+    "short_term_actions": [
+      "Block PowerShell v2 (bypasses AMSI and ScriptBlock logging entirely): Disable-WindowsOptionalFeature -Online -FeatureName MicrosoftWindowsPowerShellV2Root",
+      "Deploy EDR with script content analysis (CrowdStrike, SentinelOne, Defender ATP) to detect obfuscated payload execution in real time",
+      "Enable AMSI integration for VBScript and JScript: verify registry: HKLM\\SOFTWARE\\Microsoft\\AMSI\\Providers"
+    ],
+    "prevention": [
+      "Enforce Constrained Language Mode via AppLocker to block reflection-based AMSI bypasses",
+      "Create a SIEM detection rule: EID 4104 events containing strings 'AmsiUtils', 'amsiinitfailed', 'amsiscanbuffer', or base64 blobs >50 characters",
+      "Deploy WDAC to block unsigned or untrusted script execution"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts that executed obfuscated scripts — verify via EID 4104 SubjectUserName field from the incident window"
+  },
+  {
+    "technique_id": "T1078",
+    "technique_name": "Valid Accounts",
+    "severity": "high",
+    "immediate_actions": [
+      "Disable all accounts involved in unauthorized access: Disable-ADAccount -Identity <username> — do not delete; preserve for forensic review",
+      "Invalidate all active Kerberos tickets and sessions for involved accounts: klist purge (on affected hosts); revoke all OAuth tokens if cloud-connected",
+      "Force password reset for all involved accounts: Set-ADAccountPassword -Identity <user> -Reset -NewPassword (ConvertTo-SecureString -AsPlainText 'NewPass!' -Force) && Set-ADUser -Identity <user> -ChangePasswordAtLogon $True",
+      "Audit all logon events (EID 4624) for affected accounts in the 30 days prior to detection — establish the true compromise start time, not just detection time"
+    ],
+    "short_term_actions": [
+      "Enforce MFA for all accounts via Conditional Access or on-premises MFA proxy — especially privileged accounts",
+      "Review and disable stale accounts: Search-ADAccount -AccountInactive -TimeSpan 90.00:00:00 | Select Name,LastLogonDate — disable all accounts inactive for 90+ days",
+      "Enable account lockout policy: 5 failed attempts, 15-minute lockout, 30-minute observation window",
+      "Deploy risky sign-in detection via Azure AD Identity Protection or equivalent on-premises tool"
+    ],
+    "prevention": [
+      "Implement privileged account lifecycle process: review quarterly, disable when no longer needed",
+      "Require hardware MFA tokens (FIDO2) for all privileged domain accounts",
+      "Deploy a SIEM alert on logon from new geolocation, outside business hours, or via anonymizing proxies"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All accounts that authenticated during the incident window — review EID 4624/4648 for the complete list"
+  },
+  {
+    "technique_id": "T1053.005",
+    "technique_name": "Scheduled Task",
+    "severity": "medium",
+    "immediate_actions": [
+      "Enumerate all tasks created or modified during the incident window: Get-ScheduledTask | Where {$_.Date -gt (Get-Date).AddDays(-30)} | Select TaskName,TaskPath,Date,@{N='RunAs';E={$_.Principal.UserId}},@{N='Command';E={($_.Actions | Select -First 1).Execute}} | Sort Date -Descending",
+      "Remove all unauthorized tasks immediately: Unregister-ScheduledTask -TaskName '<taskname>' -Confirm:$false",
+      "Search for tasks running from suspicious paths: Get-ScheduledTask | Select -ExpandProperty Actions | Where {$_.Execute -like '*AppData*' -or $_.Execute -like '*Temp*' -or $_.Execute -like '*Public*'} | Select Execute,Arguments",
+      "Verify EID 4698 (Task Created) and EID 4702 (Task Modified) audit is enabled: auditpol /set /subcategory:\"Other Object Access Events\" /success:enable"
+    ],
+    "short_term_actions": [
+      "Forward EID 4698/4702/4699/4700 to SIEM with alerting on task creation outside approved change windows",
+      "Restrict scheduled task creation to administrators only via Group Policy: User Rights Assignment > 'Log on as a batch job'",
+      "Enable Sysmon to log process creation events where parent is Task Scheduler (svchost.exe -k netsvcs -p -s Schedule)"
+    ],
+    "prevention": [
+      "Baseline all scheduled tasks per system type and alert on any new task deviating from baseline",
+      "Use AppLocker to restrict which executables can be launched by Task Scheduler",
+      "Alert on schtasks.exe and at.exe invocations from non-administrative processes via Sysmon"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts configured in task RunAs settings — check task Principal.UserId for the execution context of each suspicious task"
+  },
+  {
+    "technique_id": "T1543.003",
+    "technique_name": "Windows Service",
+    "severity": "medium",
+    "immediate_actions": [
+      "Enumerate services created during the incident window: Get-WinEvent -FilterHashtable @{LogName='System';Id=7045} | Select TimeCreated,@{N='Service';E={$_.Properties[0].Value}},@{N='Path';E={$_.Properties[1].Value}},@{N='StartType';E={$_.Properties[2].Value}} | Sort TimeCreated -Descending",
+      "Stop and remove unauthorized services: sc.exe stop <service_name> && sc.exe delete <service_name>",
+      "Audit all service binary paths for services running from user-writable locations: Get-WmiObject Win32_Service | Where {$_.PathName -like '*Temp*' -or $_.PathName -like '*AppData*' -or $_.PathName -like '*Users*'} | Select Name,PathName,StartMode,StartName",
+      "Enable Service Control Manager audit if not already active: auditpol /set /subcategory:\"Security System Extension\" /success:enable — creates EID 4697"
+    ],
+    "short_term_actions": [
+      "Baseline all services per system type and maintain an allowlist — any new service triggers a SIEM alert",
+      "Restrict service creation to SYSTEM and built-in Administrators only via security policy",
+      "Review EID 7045 and EID 4697 for the past 30 days to identify all persistence services installed"
+    ],
+    "prevention": [
+      "Use WDAC to block unsigned service binaries from executing",
+      "Restrict sc.exe execution for non-administrative users via AppLocker",
+      "Create a SIEM alert on EID 7045 and EID 4697 outside of approved change windows"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts that installed malicious services — check EID 4697 SubjectAccountName field for the installer identity"
+  },
+  {
+    "technique_id": "T1547.001",
+    "technique_name": "Registry Run Keys / Startup Folder",
+    "severity": "medium",
+    "immediate_actions": [
+      "Audit all Run and RunOnce keys for unauthorized entries: reg query HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run; reg query HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run; reg query HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce; reg query HKCU\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\RunOnce",
+      "Remove unauthorized persistence entries: reg delete HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run /v <value_name> /f",
+      "Check startup folders for malicious entries: Get-ChildItem 'C:\\ProgramData\\Microsoft\\Windows\\Start Menu\\Programs\\StartUp'; Get-ChildItem \"$env:APPDATA\\Microsoft\\Windows\\Start Menu\\Programs\\Startup\"",
+      "Enable registry auditing on Run keys: set a SACL via Regedit > HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run > Permissions > Advanced > Auditing — generates EID 4657"
+    ],
+    "short_term_actions": [
+      "Deploy Sysmon with registry monitoring rules to alert on modifications to Run/RunOnce keys (Sysmon EID 12, 13, 14)",
+      "Baseline all Run key values per system type and forward changes to SIEM",
+      "Restrict registry write access to Run keys for non-administrator accounts via Group Policy"
+    ],
+    "prevention": [
+      "Use AppLocker or SRP to prevent unauthorized executables from launching at startup",
+      "Monitor EID 4657 (Registry value modified) for Run key changes via Windows Security audit",
+      "Deploy an EDR with registry persistence detection and automated rollback capabilities"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts active on the affected system at next boot — persistence executes in the context of the logged-on user or SYSTEM"
+  },
+  {
+    "technique_id": "T1136.001",
+    "technique_name": "Local Account Creation",
+    "severity": "high",
+    "immediate_actions": [
+      "Enumerate all accounts created during the incident window: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4720} | Select TimeCreated,@{N='NewAccount';E={$_.Properties[0].Value}},@{N='CreatedBy';E={$_.Properties[4].Value}},@{N='Domain';E={$_.Properties[1].Value}}",
+      "Disable and delete all unauthorized accounts immediately: Disable-LocalUser -Name <backdoor_account>; Remove-LocalUser -Name <backdoor_account>",
+      "Check if new accounts were added to privileged groups: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4732,4728} | Where {$_.TimeCreated -gt (Get-Date).AddDays(-30)} | Select TimeCreated,Message",
+      "Verify no unauthorized accounts exist in local Administrators group on any affected host: Get-LocalGroupMember -Group Administrators"
+    ],
+    "short_term_actions": [
+      "Enable EID 4720 forwarding to SIEM with alerting on all new account creation, especially outside change windows",
+      "Implement a formal account provisioning process requiring documented approval before any account creation",
+      "Audit all local administrator group memberships across the environment using LAPS reporting or Entra ID"
+    ],
+    "prevention": [
+      "Restrict local account creation to domain administrators via User Rights Assignment GPO",
+      "Block local account logon on domain-joined systems to enforce domain account usage",
+      "Deploy a SIEM alert on EID 4720 at any time — local account creation is rare in managed environments"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "The newly created backdoor accounts — disable immediately; also investigate the account that created them (EID 4720 SubjectAccountName)"
+  },
+  {
+    "technique_id": "T1098.007",
+    "technique_name": "Additional Group Membership",
+    "severity": "critical",
+    "immediate_actions": [
+      "Audit all group membership changes in the incident window: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4728,4732,4756} | Select TimeCreated,@{N='AddedAccount';E={$_.Properties[0].Value}},@{N='Group';E={$_.Properties[2].Value}},@{N='ChangedBy';E={$_.Properties[4].Value}}",
+      "Remove all unauthorized accounts from privileged groups immediately: Remove-ADGroupMember -Identity 'Domain Admins' -Members <backdoor_account> -Confirm:$false",
+      "Review all privileged group memberships right now: Get-ADGroupMember -Identity 'Domain Admins' -Recursive | Select Name,SamAccountName,DistinguishedName — compare to approved membership list",
+      "Reset credentials for legitimate accounts used to make unauthorized group membership changes"
+    ],
+    "short_term_actions": [
+      "Enable privileged group change alerting in SIEM: EID 4728 (Domain Admin group change) should trigger immediate paging outside change windows",
+      "Deploy Microsoft Defender for Identity alert: 'Account added to sensitive group' (built-in detection)",
+      "Implement Privileged Identity Management (PIM) with time-limited, approval-based group membership elevation"
+    ],
+    "prevention": [
+      "Use PIM/PAM with time-bound group membership so no account has standing Domain Admin rights",
+      "Set AdminSDHolder propagation monitoring — privileged group ACLs should not change unexpectedly",
+      "Audit privileged group memberships weekly and compare against an approved membership list"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All accounts added to privileged groups — these accounts now have elevated rights that must be revoked immediately"
+  },
+  {
+    "technique_id": "T1484.001",
+    "technique_name": "Domain Policy Modification",
+    "severity": "critical",
+    "immediate_actions": [
+      "Audit all GPO changes in the incident window: Get-WinEvent -FilterHashtable @{LogName='Security';Id=5136} | Where {$_.Properties[1].Value -like '*GroupPolicyContainer*'} | Select TimeCreated,@{N='Object';E={$_.Properties[8].Value}},@{N='ChangedBy';E={$_.Properties[3].Value}}",
+      "Run gpresult /h gpo_report.html on affected systems and compare to a known-good GPO baseline to identify all unauthorized settings",
+      "Revert unauthorized GPO changes via Group Policy Management Console — restore from backup if available: Restore-GPO -Name '<GPO Name>' -Path C:\\GPOBackup",
+      "Audit all accounts with GPO edit/modify permissions: Get-GPPermissions -All -Name <gpo_name> | Where {$_.Permission -in 'GpoEdit','GpoEditDeleteModifySecurity'} | Select Trustee,Permission"
+    ],
+    "short_term_actions": [
+      "Enable Directory Service Changes audit: auditpol /set /subcategory:\"Directory Service Changes\" /success:enable — generates EID 5136 on DCs for all AD object changes including GPOs",
+      "Backup all current GPO configurations immediately: Backup-Gpo -All -Path C:\\GPO_Backup_$(Get-Date -Format yyyyMMdd)",
+      "Deploy AGPM (Advanced Group Policy Management) to enforce approval workflow for all GPO modifications"
+    ],
+    "prevention": [
+      "Delegate GPO editing rights only to specific named administrators — never to generic groups or all Domain Admins",
+      "Enable SIEM alert: EID 5136 with objectClass=groupPolicyContainer outside change windows",
+      "Test GPO changes in a staging OU before applying to production via AGPM"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "All domain systems affected by the modified GPOs — scope determined by GPO link structure; run gpresult to assess blast radius"
+  },
+  {
+    "technique_id": "T1190",
+    "technique_name": "Exploit Public-Facing Application",
+    "severity": "critical",
+    "immediate_actions": [
+      "Take the exploited application OFFLINE or apply emergency WAF rules to block the exploit vector before patching — protect all other users while remediation proceeds",
+      "Apply the vendor's security patch immediately — do not wait for a change window; critical application vulnerabilities warrant emergency change procedures",
+      "Rotate ALL credentials accessible to the compromised application: service accounts, API keys, database connection strings, secrets in configuration files, certificates",
+      "Preserve forensic evidence BEFORE any remediation: take a memory dump (WinPmem/DumpIt) and disk snapshot of the compromised server for legal/forensic preservation"
+    ],
+    "short_term_actions": [
+      "Review application logs from the earliest possible timestamp — not just detection time — to determine full scope: Get-ChildItem -Path C:\\inetpub\\logs -Recurse -Include *.log | Sort LastWriteTime -Descending | Select -First 10",
+      "Scan the compromised server for web shells and backdoors: Get-ChildItem -Path C:\\inetpub\\wwwroot -Recurse -Include *.aspx,*.php,*.jsp,*.ashx | Where {$_.LastWriteTime -gt (Get-Date).AddDays(-30)} | Select FullName,LastWriteTime",
+      "Notify legal and compliance teams if the exposed application processed regulated data (PII, PHI, PCI DSS cardholder data)"
+    ],
+    "prevention": [
+      "Establish a vulnerability management SLA: critical CVEs patched within 24-72 hours of vendor release",
+      "Deploy a WAF with virtual patching capability in front of all internet-facing applications as a secondary defense layer",
+      "Conduct quarterly external penetration testing and monthly authenticated vulnerability scans against public-facing infrastructure",
+      "Implement network segmentation so compromised DMZ systems cannot directly reach internal AD and database resources"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All service accounts and application credentials stored on or accessible from the exploited system — treat as fully compromised"
+  },
+  {
+    "technique_id": "T1566",
+    "technique_name": "Phishing",
+    "severity": "high",
+    "immediate_actions": [
+      "Block all phishing domains and URLs at the email gateway, DNS sinkhole, and web proxy immediately — extract indicators from email headers and message body",
+      "Search for delivery of similar phishing messages across the organization and notify all recipients: use email gateway log search or Microsoft Purview Content Search for the sender domain/subject pattern",
+      "Reset credentials for all users confirmed to have clicked the phishing link or opened and interacted with the attachment",
+      "Remove the phishing email from all mailboxes: in Microsoft 365 use: Search-UnifiedAuditLog then New-ComplianceSearchAction -ActionName Purge -PurgeType HardDelete in Security & Compliance Center"
+    ],
+    "short_term_actions": [
+      "Enable Microsoft Defender for Office 365 Safe Links and Safe Attachments (or equivalent) — all links should be rewritten and attachment-detonated before delivery",
+      "Enable DMARC, DKIM, and SPF for all organizational domains: publish DMARC record at minimum p=quarantine to reject spoofed messages",
+      "Conduct targeted security awareness training for all users who received this phishing campaign within 48 hours of the incident"
+    ],
+    "prevention": [
+      "Deploy Advanced Threat Protection with sandboxed attachment detonation for all inbound email",
+      "Enforce MFA on all email and VPN access so credential theft via phishing does not immediately enable account takeover",
+      "Conduct regular phishing simulation campaigns and use results to target security awareness training at highest-risk users"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All users who interacted with the phishing content — any credentials entered on phishing sites must be treated as fully compromised"
+  },
+  {
+    "technique_id": "T1486",
+    "technique_name": "Data Encrypted for Impact (Ransomware)",
+    "severity": "critical",
+    "immediate_actions": [
+      "IMMEDIATELY disconnect all affected systems from the network — remove network cable and disable Wi-Fi; do NOT power off systems (memory evidence will be lost, and some ransomware variants trigger wipers on shutdown)",
+      "DO NOT pay ransom without engaging a specialist ransomware IR firm — check nomoreransom.org for free decryptors before making any payment decision",
+      "Preserve forensic evidence before any remediation: collect memory images (WinPmem, DumpIt) and disk images (dd or forensic imager) of affected systems for legal preservation and root cause analysis",
+      "Notify CISO, legal counsel, and executive leadership immediately — ransomware incidents trigger mandatory breach notification obligations (GDPR 72h, HIPAA, US state breach laws)"
+    ],
+    "short_term_actions": [
+      "Test clean backup restores in an ISOLATED environment before touching production — verify backups were not also encrypted or corrupted by the ransomware actor",
+      "Identify the ransomware variant via file extension, ransom note, and ID Ransomware (id-ransomware.malwarehunterteam.com)",
+      "Contact FBI IC3 (ic3.gov) and CISA (report.cisa.gov) — law enforcement may have decryption keys from prior takedowns",
+      "Identify and fully remediate the initial access vector before restoring any systems to prevent re-infection"
+    ],
+    "prevention": [
+      "Maintain offline, air-gapped backups that cannot be reached by ransomware — follow the 3-2-1 rule: 3 copies, 2 media types, 1 offsite",
+      "Deploy anti-ransomware protection in EDR (Windows Defender Controlled Folder Access, SentinelOne Rollback, CrowdStrike Falcon Complete)",
+      "Segment the network so ransomware cannot reach file servers, backup systems, and DCs from a single compromised endpoint"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "All accounts on affected systems — ransomware actors routinely dump credentials before deploying encryption; treat entire environment as compromised"
+  },
+  {
+    "technique_id": "T1490",
+    "technique_name": "Inhibit System Recovery",
+    "severity": "critical",
+    "immediate_actions": [
+      "Immediately verify if Volume Shadow Copies still exist: vssadmin list shadows — if deleted, recovery must come from external backups; do NOT attempt restore from the same environment if it is compromised",
+      "Check BCD store for tampering: bcdedit /enum all — look for disabled recovery options or modified boot entries that prevent safe-mode boot",
+      "Check external/offline backup integrity immediately — test restore of at least one critical system to an ISOLATED environment before trusting any backup",
+      "Enable VSS protection going forward: reg add HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows NT\\SystemRestore /v DisableSR /t REG_DWORD /d 0 /f && vssadmin resize shadowstorage /For=C: /On=C: /MaxSize=20GB"
+    ],
+    "short_term_actions": [
+      "Enable Controlled Folder Access in Windows Defender to block ransomware from deleting shadow copies: Set-MpPreference -EnableControlledFolderAccess Enabled",
+      "Restrict vssadmin and wmic shadowcopy delete for non-administrator accounts via AppLocker path rules",
+      "Configure persistent shadow copies on all critical servers with minimum 30-day retention and at least one off-host copy"
+    ],
+    "prevention": [
+      "Implement immutable backups via Veeam Hardened Repository, Rubrik, or AWS S3 Object Lock — immutable backups cannot be deleted even with admin credentials",
+      "Block vssadmin.exe and wmic.exe for non-administrators via AppLocker",
+      "Create a real-time SIEM alert for vssadmin delete shadows or wmic shadowcopy delete commands — these should never run in normal operations"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Recovery capability for ALL systems — shadow copy deletion is a pre-encryption stage affecting the entire environment's recoverability"
+  },
+  {
+    "technique_id": "T1557.001",
+    "technique_name": "LLMNR/NBT-NS Poisoning and SMB Relay",
+    "severity": "high",
+    "immediate_actions": [
+      "Disable LLMNR immediately via Group Policy: Computer Config > Admin Templates > Network > DNS Client > 'Turn off multicast name resolution' = Enabled",
+      "Disable NetBIOS over TCP/IP for all adapters: Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\NetBT\\Parameters\\Interfaces\\Tcpip_*' -Name NetbiosOptions -Value 2",
+      "Enable SMB signing on ALL systems: Set-SmbServerConfiguration -RequireSecuritySignature $True -Force && Set-SmbClientConfiguration -RequireSecuritySignature $True -Force",
+      "Rotate credentials for all accounts whose NTLM challenge-response hashes were captured during the poisoning window — identify affected accounts by correlating LLMNR traffic timestamps with user logon activity"
+    ],
+    "short_term_actions": [
+      "Disable WPAD (Web Proxy Auto-Discovery) which is also commonly poisoned: reg add 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings\\Wpad' /v WpadOverride /t REG_DWORD /d 1 /f",
+      "Enable Extended Protection for Authentication (EPA) on all IIS and Exchange servers to prevent NTLM relay to HTTP services",
+      "Enforce LDAP signing and channel binding on all Domain Controllers to block NTLM relay to LDAP: set Domain Controller: LDAP server signing requirements = Require signing in Group Policy"
+    ],
+    "prevention": [
+      "Disable LLMNR and NetBIOS globally via Group Policy as a baseline security configuration",
+      "Require SMB signing on all systems as a domain-wide GPO",
+      "Enable Extended Protection for Authentication (EPA) on all web services (IIS, Exchange, ADFS)"
+    ],
+    "reset_required": true,
+    "accounts_at_risk": "Accounts whose NTLM hashes were captured — typically accounts that made file, print, or name-resolution requests from affected network segments during the attack window"
+  },
+  {
+    "technique_id": "T1069.002",
+    "technique_name": "Domain Groups Discovery",
+    "severity": "medium",
+    "immediate_actions": [
+      "Identify the enumeration scope: review LDAP query logs and EID 4661 (object handle requested) for bulk group membership queries from the incident window: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4661} | Where {$_.Message -like '*group*'} | Group {$_.Properties[4].Value} | Sort Count -Descending",
+      "Check for BloodHound/SharpHound collection artifacts on affected hosts: Get-ChildItem -Recurse -Include *BloodHound*,*SharpHound*,*_computers.json,*_groups.json C:\\ 2>$null | Select FullName,LastWriteTime",
+      "Alert privileged account holders that the attacker has full domain group topology — assume they know all attack paths to Domain Admins and high-value targets"
+    ],
+    "short_term_actions": [
+      "Enable LDAP query audit on Domain Controllers: auditpol /set /subcategory:\"Directory Service Access\" /success:enable — generates EID 4661 for AD object reads",
+      "Create SIEM detection: >100 LDAP queries for group membership objects within 60 seconds from a single non-DC source",
+      "Deploy Microsoft Defender for Identity — BloodHound/SharpHound collection is detected as a built-in alert ('Reconnaissance using directory services queries')"
+    ],
+    "prevention": [
+      "Restrict read access on sensitive AD attributes (adminCount, ms-DS-AllowedToDelegateTo) to administrators only via ACL hardening",
+      "Deploy honeypot domain group accounts that should never be queried — any LDAP read on them triggers an alert",
+      "Implement tiered admin model so group membership enumeration does not reveal direct attack paths to Domain Admins"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "No direct credential risk from enumeration alone — but attacker now has a complete attack path map to privileged accounts; prioritize blocking those paths"
+  },
+  {
+    "technique_id": "T1087.002",
+    "technique_name": "Domain Account Discovery",
+    "severity": "medium",
+    "immediate_actions": [
+      "Identify accounts enumerated: review EID 4661 and LDAP query logs for bulk user object enumeration from the incident window — check for ADRecon, ldapdomaindump, or net user /domain patterns",
+      "Search for domain enumeration tool artifacts: Get-ChildItem -Recurse -Include adrecon*,domain_users.json,domain_computers.json,ldapdomaindump* C:\\ 2>$null | Select FullName,LastWriteTime",
+      "Alert privileged account holders that their account details (username, group memberships, last logon) are known to the attacker — watch for targeted credential attacks against those accounts"
+    ],
+    "short_term_actions": [
+      "Enable DS Access audit: auditpol /set /subcategory:\"Directory Service Access\" /success:enable — generates EID 4661 for LDAP object reads",
+      "Create SIEM detection: >50 EID 4661 events for user objects within 30 seconds from a single non-DC source",
+      "Review LDAP ACLs — restrict read access on sensitive user attributes (description fields often contain credentials, ms-DS-AllowedToDelegateTo) to administrators only"
+    ],
+    "prevention": [
+      "Restrict AD read permissions for standard users on sensitive user object attributes via ACL modification",
+      "Deploy honeypot user accounts that should never be queried — any LDAP read triggers an immediate alert",
+      "Deploy Microsoft Defender for Identity for LDAP reconnaissance detection"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "No direct credential risk from discovery alone — enumerated account details enable targeted follow-on attacks; prioritize securing discovered privileged accounts"
+  },
+  {
+    "technique_id": "T1048",
+    "technique_name": "Exfiltration Over Alternative Protocol",
+    "severity": "high",
+    "immediate_actions": [
+      "Block identified exfiltration endpoints at the firewall immediately — check for large outbound transfers to cloud storage (Dropbox, Mega, Google Drive), paste sites, or unusual IPs/domains",
+      "Capture and analyze network logs from the suspected exfiltration timeframe — look for DNS tunneling patterns: unusually long queries (>100 chars), high-frequency requests, excessive TXT record queries",
+      "Determine what data was exfiltrated: cross-reference exfiltration timestamps with file access audit logs (EID 4663), SharePoint audit logs, and DLP alerts",
+      "Notify legal and compliance teams if PII, PHI, or regulated data was exfiltrated — mandatory breach notification timelines begin at point of discovery"
+    ],
+    "short_term_actions": [
+      "Deploy DNS inspection/sinkholing to detect tunneling: route all DNS through an inspecting resolver and alert on queries >63 characters per label or >10 queries/second to a single domain",
+      "Implement egress filtering — allow only required outbound protocols (HTTPS via authenticated proxy) and block all others by default",
+      "Deploy DLP on email gateway and web proxy to detect and block sensitive data transmission going forward"
+    ],
+    "prevention": [
+      "Route all outbound traffic through an authenticated web proxy — block direct internet access from endpoints",
+      "Deploy a DNS security gateway (Cisco Umbrella, Cloudflare Gateway) with tunneling detection",
+      "Classify sensitive data and apply DLP policies with automatic blocking of unauthorized transmission"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts that accessed exfiltrated data — verify via EID 4663 (file access) correlated with the exfiltration timestamp to determine data exposure scope"
+  },
+  {
+    "technique_id": "T1048.003",
+    "technique_name": "Exfiltration Over Unencrypted Protocol",
+    "severity": "high",
+    "immediate_actions": [
+      "Block outbound DNS to all resolvers except your authorized corporate resolvers immediately — this stops active DNS tunneling: New-NetFirewallRule -DisplayName 'Block Direct DNS' -Direction Outbound -Protocol UDP -RemotePort 53 -Action Block (then allow only your resolvers)",
+      "Block outbound ICMP tunneling: New-NetFirewallRule -DisplayName 'Block Outbound ICMP' -Direction Outbound -Protocol ICMPv4 -Action Block",
+      "Analyze network packet captures from the incident period for data-encoding patterns: base64 strings in DNS query names, unusually large ICMP payloads, high-volume FTP transfers",
+      "Identify data scope: determine what files or data were accessible to the attacker during the exfiltration window using EID 4663 file access auditing"
+    ],
+    "short_term_actions": [
+      "Enable full DNS query logging on all internal resolvers and forward to SIEM",
+      "Deploy network DLP to inspect outbound HTTP traffic for encoded sensitive data patterns",
+      "Block FTP (TCP 21) and raw socket protocols at egress unless operationally required"
+    ],
+    "prevention": [
+      "Block direct outbound DNS from endpoints — enforce use of corporate resolvers that log and inspect all queries",
+      "Deploy a DNS security solution (Palo Alto DNS Security, Cisco Umbrella) with tunneling detection capability",
+      "Apply strict egress filtering for all non-standard protocols at the perimeter firewall"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Accounts with access to the data that was exfiltrated — review file/share permissions and access logs on affected data stores"
+  },
+  {
+    "technique_id": "T1105",
+    "technique_name": "Ingress Tool Transfer",
+    "severity": "medium",
+    "immediate_actions": [
+      "Identify all files downloaded during the incident window: review EID 4688 process creation events for certutil -urlcache, bitsadmin /transfer, PowerShell Invoke-WebRequest/DownloadFile, and curl/wget invocations",
+      "Quarantine all files downloaded by attacker processes and submit to sandbox for behavioral analysis: Get-ChildItem C:\\Windows\\Temp,C:\\Users\\*\\AppData\\Local\\Temp -Recurse | Where {$_.LastWriteTime -gt (Get-Date).AddDays(-7)} | Select FullName,LastWriteTime,Length",
+      "Block identified download URLs and IPs at the web proxy and firewall",
+      "Scan all affected systems with an updated EDR/AV to detect any tools that were downloaded and may still be present"
+    ],
+    "short_term_actions": [
+      "Block certutil.exe network access via Windows Defender Firewall: New-NetFirewallRule -DisplayName 'Block certutil outbound' -Direction Outbound -Program 'C:\\Windows\\System32\\certutil.exe' -Action Block",
+      "Implement authenticated web proxy with TLS inspection to intercept and scan all HTTPS downloads",
+      "Enable Application Reputation (SmartScreen) to block downloads of unsigned or low-reputation executables"
+    ],
+    "prevention": [
+      "Block LOLBin-based downloads via AppLocker: deny certutil.exe, mshta.exe, bitsadmin.exe from making outbound network connections",
+      "Apply WDAC to block execution of downloaded executables from user-writable paths (Temp, AppData, Downloads)",
+      "Alert on outbound HTTP/HTTPS connections from cmd.exe, powershell.exe, certutil.exe, and bitsadmin.exe via proxy logs"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Account under which the download was performed — check EID 4688 SubjectUserName from the incident window"
+  },
+  {
+    "technique_id": "T1218.005",
+    "technique_name": "Mshta",
+    "severity": "medium",
+    "immediate_actions": [
+      "Block mshta.exe from making outbound network connections via Windows Firewall: New-NetFirewallRule -DisplayName 'Block mshta outbound' -Direction Outbound -Program 'C:\\Windows\\System32\\mshta.exe' -Action Block",
+      "Identify all mshta.exe executions during the incident window: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4688} | Where {$_.Properties[5].Value -like '*mshta*'} | Select TimeCreated,@{N='CmdLine';E={$_.Properties[8].Value}},@{N='User';E={$_.Properties[1].Value}}",
+      "Analyze any HTA files executed — extract from disk or reconstruct from process memory and submit to sandbox for behavioral analysis",
+      "Search for mshta-based persistence: check Run keys, scheduled tasks, and startup folders for mshta.exe invocations"
+    ],
+    "short_term_actions": [
+      "Disable mshta.exe via AppLocker Publisher rule or WDAC policy — mshta.exe has no legitimate end-user use case in most enterprise environments",
+      "Deploy ASR rule to block mshta.exe from launching child processes: Set-MpPreference -AttackSurfaceReductionRules_Ids 3b576869-a4ec-4529-8536-b80a7769e899 -AttackSurfaceReductionRules_Actions Enabled",
+      "Enable command-line logging for all process creation events: reg add HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Audit /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f"
+    ],
+    "prevention": [
+      "Block mshta.exe execution via AppLocker for all non-administrative users — it has no common legitimate user-facing function",
+      "Create a SIEM alert on any mshta.exe execution — treat every instance as suspicious until proven otherwise",
+      "Deploy ASR rules to restrict mshta.exe from spawning child processes and making network connections"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Account that executed mshta.exe — check Sysmon EID 1 or EID 4688 User field from the incident window"
+  },
+  {
+    "technique_id": "T1218.010",
+    "technique_name": "Regsvr32",
+    "severity": "medium",
+    "immediate_actions": [
+      "Identify all regsvr32.exe executions with remote URLs (Squiblydoo technique) during the incident: Get-WinEvent -FilterHashtable @{LogName='Security';Id=4688} | Where {$_.Properties[8].Value -like '*regsvr32*' -and ($_.Properties[8].Value -like '*/i:http*' -or $_.Properties[8].Value -like '*/i:ftp*')}",
+      "Block regsvr32.exe from making outbound network connections: New-NetFirewallRule -DisplayName 'Block regsvr32 outbound' -Direction Outbound -Program 'C:\\Windows\\System32\\regsvr32.exe' -Action Block",
+      "Analyze any COM scriptlets (.sct files) loaded via regsvr32 — extract from web proxy cache or process memory and submit to sandbox"
+    ],
+    "short_term_actions": [
+      "Deploy ASR rule to block regsvr32 from loading COM scriptlets from the internet: Set-MpPreference -AttackSurfaceReductionRules_Ids b2b3f03d-6a65-4f7b-a9c7-1c7ef74a9ba4 -AttackSurfaceReductionRules_Actions Enabled",
+      "Create a SIEM alert: regsvr32.exe with /i: flag pointing to http/https/ftp URLs — this Squiblydoo bypass pattern has no legitimate business use",
+      "Enable command-line process audit logging if not already active: reg add HKLM\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Policies\\System\\Audit /v ProcessCreationIncludeCmdLine_Enabled /t REG_DWORD /d 1 /f"
+    ],
+    "prevention": [
+      "Apply AppLocker Publisher rules to restrict regsvr32.exe to only registering locally-signed DLLs",
+      "Block regsvr32.exe network access at the firewall as standard hardening configuration",
+      "Deploy WDAC policies to prevent loading of unsigned COM scriptlets via regsvr32"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "Account under which regsvr32.exe was executed — check EID 4688 SubjectUserName from the incident window"
+  },
+  {
+    "technique_id": "T1498",
+    "technique_name": "Network Denial of Service",
+    "severity": "high",
+    "immediate_actions": [
+      "Activate upstream DDoS mitigation immediately — contact your ISP or CDN provider (Cloudflare Magic Transit, Akamai Prolexic, AWS Shield Advanced) to enable scrubbing at the network edge",
+      "Enable rate limiting on all public-facing services at the load balancer/firewall level: limit new connections per source IP and implement SYN cookies",
+      "Identify attack source characteristics (source IPs, protocol, port patterns) from firewall logs and implement temporary ACLs: New-NetFirewallRule -DisplayName 'DDoS Block Range' -Direction Inbound -RemoteAddress <attacker_range> -Action Block",
+      "Verify EID 5152 (WFP blocked packet) and EID 4227 (TCP port exhaustion) rates as ongoing volumetric attack impact indicators"
+    ],
+    "short_term_actions": [
+      "Migrate public-facing services behind a DDoS-protected CDN or scrubbing center if not already in place",
+      "Implement BGP Flowspec or null routing for identified attack source prefixes with your upstream provider",
+      "Deploy SYN cookies on all load balancers and firewalls handling public traffic"
+    ],
+    "prevention": [
+      "Contract with a DDoS mitigation provider as baseline infrastructure — not after an attack occurs",
+      "Implement BCP38 (anti-spoofing) at your network edge to prevent your infrastructure being used for amplification attacks",
+      "Configure rate limiting and connection limits on all public-facing services as a standard security baseline"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "No direct credential risk — service availability and business continuity are the primary impacts during a volumetric attack"
+  },
+  {
+    "technique_id": "T1499",
+    "technique_name": "Endpoint Denial of Service",
+    "severity": "medium",
+    "immediate_actions": [
+      "Identify the targeted service from EID 7011 (service transaction timeout) and application logs: Get-WinEvent -FilterHashtable @{LogName='System';Id=7011} | Select TimeCreated,@{N='Service';E={$_.Properties[0].Value}}",
+      "Restart affected services to restore immediate availability: Restart-Service -Name W3SVC,WAS -Force — monitor for recurrence and check resource consumption: Get-Counter '\\Processor(_Total)\\% Processor Time' -SampleInterval 5",
+      "Enable connection rate limiting on affected applications: IIS example — set maxConnections in applicationHost.config under system.webServer/serverRuntime",
+      "Identify and block the attack source IPs from application access logs: review IIS/application logs for the source of high-volume requests and add temporary firewall blocks"
+    ],
+    "short_term_actions": [
+      "Deploy application-layer rate limiting at the WAF or load balancer level: per-IP request rate limits prevent single-source floods",
+      "Configure application request timeouts to defend against slow-rate attacks (Slowloris): set connection timeout to 60 seconds in IIS/Nginx/Apache",
+      "Enable HTTP flood detection in your WAF with automatic blocking for sources exceeding request rate thresholds"
+    ],
+    "prevention": [
+      "Deploy a WAF with application-layer DDoS protection in front of all web-facing applications",
+      "Configure auto-scaling for web tier resources so capacity automatically absorbs request floods",
+      "Implement CAPTCHA challenges for suspicious traffic patterns at the application layer"
+    ],
+    "reset_required": false,
+    "accounts_at_risk": "No direct credential risk — service availability impact affects all users of the targeted application"
+  }
+]

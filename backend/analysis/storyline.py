@@ -436,16 +436,33 @@ def _extract_src(e: ForensicEvent) -> str | None:
     # EID 5140/5145 and network logon events emit the source IP under several field
     # names depending on the Windows version and export tool:
     #   "Source Address:", "Source Network Address:", "IpAddress:", "Client Address:"
+    #   "Source:" (short form used in simple CSV logs)
     # Some formatters also prefix the IP with one or two backslashes.
+    desc = e.description or ''
     m = re.search(
         r'(?:Source(?:\s+Network)?\s+Address|IpAddress|Client\s+(?:IP\s+)?Address)'
         r':\s*\\{0,2}(\d[\d.:a-fA-F]+)',
-        e.description or '', re.IGNORECASE,
+        desc, re.IGNORECASE,
     )
     if m:
-        ip = m.group(1).strip()
+        ip = m.group(1).rstrip('.,;').strip()
         if ip not in ('-', '', '::1', '127.0.0.1'):
             return ip
+    # Short "Source: IP" format used in simplified event logs
+    m2 = re.search(
+        r'(?<![A-Za-z])Source:\s*\\{0,2}(\d[\d.:a-fA-F]+)',
+        desc, re.IGNORECASE,
+    )
+    if m2:
+        ip = m2.group(1).rstrip('.,;').strip()
+        if ip not in ('-', '', '::1', '127.0.0.1'):
+            return ip
+    # "Workstation: HOSTNAME" as fallback source identifier
+    m3 = re.search(r'Workstation:\s*([\w][\w\-]{1,30})', desc, re.IGNORECASE)
+    if m3:
+        host = m3.group(1).rstrip('.,;').strip()
+        if host.lower() not in ('unknown', '-', 'n/a'):
+            return host
     return None
 
 

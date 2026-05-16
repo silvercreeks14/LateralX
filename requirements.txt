@@ -4,8 +4,6 @@ sqlalchemy>=2.0.30
 pydantic>=2.7.0
 python-dotenv>=1.0.1
 groq>=0.13.0
-# google-generativeai removed: incompatible with Python 3.13+
-# Gemini calls now use the REST API directly via requests (no library needed)
 requests==2.32.3
 networkx>=3.3
 python-multipart>=0.0.9

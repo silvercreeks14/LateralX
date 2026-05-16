@@ -21,6 +21,54 @@ def _extract_event_id(message: str) -> str | None:
     return match.group(1) if match else None
 
 
+# ── Sysmon Message deep-parse helpers ─────────────────────────────────────────
+
+# Canonical key names for fields extracted from Sysmon Message blocks.
+# Keyed by lowercase so the IGNORECASE regex match can normalize to PascalCase.
+_SYSMON_MSG_CANONICAL_KEYS: dict[str, str] = {
+    "image":             "Image",
+    "commandline":       "CommandLine",
+    "parentimage":       "ParentImage",
+    "parentcommandline": "ParentCommandLine",
+    "user":              "User",
+    "targetimage":       "TargetImage",
+    "grantedaccess":     "GrantedAccess",
+    "utctime":           "UtcTime",
+}
+
+# Compiled multiline pattern – one scan extracts all targeted fields.
+# IGNORECASE so Message blocks written by different Sysmon versions still match.
+_SYSMON_MSG_RE = re.compile(
+    r"^\s*(?P<key>Image|CommandLine|ParentImage|ParentCommandLine"
+    r"|User|TargetImage|GrantedAccess|UtcTime)\s*:\s*(?P<value>.+?)\s*$",
+    re.MULTILINE | re.IGNORECASE,
+)
+
+
+def _deep_parse_sysmon_message(message_text: str) -> dict:
+    """
+    Extract high-signal forensic key-value pairs from a Sysmon Message block.
+
+    Targeted fields: Image, CommandLine, ParentImage, ParentCommandLine,
+    User, TargetImage, GrantedAccess.
+
+    Uses a single compiled multiline regex pass; first occurrence of each key
+    wins (Sysmon always lists the most specific value first).  Returns an empty
+    dict on empty/None input rather than raising.
+    """
+    if not message_text:
+        return {}
+    result: dict = {}
+    for m in _SYSMON_MSG_RE.finditer(message_text):
+        key = _SYSMON_MSG_CANONICAL_KEYS.get(m.group("key").lower(), m.group("key"))
+        if key in result:          # first match wins
+            continue
+        value = m.group("value").strip()
+        if value and value.lower() not in ("-", "null", "none", ""):
+            result[key] = value
+    return result
+
+
 def _find_column(headers: list[str], candidates: list[str]) -> str | None:
     """Return the first candidate column name that exists in headers, else None."""
     for c in candidates:
@@ -181,7 +229,7 @@ def _normalize_hostname(raw: str | None) -> str:
     """
     if not raw or raw.strip().lower() in ("", "unknown-host", "unknown", "-", "n/a"):
         return "UNKNOWN-HOST"
-    host = raw.strip()
+    host = raw.strip().rstrip('.')  # strip trailing dots (DNS FQDN / Windows Event Viewer export)
     for suffix in _DOMAIN_SUFFIXES:
         if host.lower().endswith(suffix):
             host = host[: len(host) - len(suffix)]
@@ -528,13 +576,14 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
 
     headers = [h.strip().lower() for h in reader.fieldnames]
 
-    ts_col = _find_column(headers, ["timestamp", "datetime", "time", "date", "eventtime", "@timestamp"])
+    ts_col   = _find_column(headers, ["timestamp", "datetime", "time", "date", "eventtime", "@timestamp", "timecreated"])
     desc_col = _find_column(headers, ["description", "message", "msg", "details"])
+    msg_col  = _find_column(headers, ["message"])  # Sysmon/Windows Event Viewer Message column
 
     host_col = _find_column(headers, [
         "hostname", "host", "source_host", "computer",
         "computername", "computer_name", "workstationname", "workstation_name",
-        "workstation", "devicename", "device_name",
+        "workstation", "devicename", "device_name", "machinename",
     ])
     user_col = _find_column(headers, [
         "username", "user", "account", "accountname", "account_name",
@@ -543,7 +592,9 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
         "targetusername", "target_username",
     ])
     type_col = _find_column(headers, ["event_type", "type", "category"])
-    eid_col = _find_column(headers, ["event_id", "eventid"])
+    eid_col  = _find_column(headers, ["event_id", "eventid", "id"])
+
+    raw_source = RawSource.VELOCIRAPTOR if msg_col else RawSource.GENERIC
 
     events: list[ForensicEvent] = []
     # Re-read with normalised keys
@@ -567,6 +618,11 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
             raw_user = norm_row.get(user_col) if user_col else None
             user = _normalize_username(raw_user) or _extract_user_from_description(description)
 
+            # Deep-parse Sysmon Message block when present
+            sysmon_extra: dict = {}
+            if msg_col:
+                sysmon_extra = _deep_parse_sysmon_message(norm_row.get(msg_col, "") or "")
+
             events.append(
                 ForensicEvent(
                     timestamp=timestamp_raw,
@@ -574,8 +630,9 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
                     source_host=_normalize_hostname(norm_row.get(host_col) if host_col else None),
                     user=user,
                     description=description[:1000],
-                    raw_source=RawSource.GENERIC,
+                    raw_source=raw_source,
                     event_id=norm_row.get(eid_col) if eid_col else None,
+                    extra=sysmon_extra if sysmon_extra else None,
                 )
             )
         except Exception:
@@ -615,16 +672,19 @@ def parse_sysmon_csv(content: str) -> list[ForensicEvent]:
                 return v
         return ""
 
+    # Detect Sysmon Message column for deep-parse pipeline
+    msg_col_sysmon = _find_column(headers, ["message"])
+
     events: list[ForensicEvent] = []
     reader2 = csv.DictReader(StringIO(content))
     for row in reader2:
         try:
             # Prefer full SystemTime over the truncated 'timestamp' field
-            ts = _get(row, "SystemTime", "timestamp", "datetime", "time", "CreationUtcTime")
+            ts = _get(row, "SystemTime", "timestamp", "datetime", "time", "CreationUtcTime", "timecreated")
             if not ts:
                 ts = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-            host = _normalize_hostname(_get(row, "Computer", "SourceHostname", "hostname", "host"))
+            host = _normalize_hostname(_get(row, "Computer", "SourceHostname", "hostname", "host", "machinename"))
 
             # EventID may have a trailing '.0' (float-exported) — strip it
             raw_eid = _get(row, "EventID")
@@ -680,6 +740,13 @@ def parse_sysmon_csv(content: str) -> list[ForensicEvent]:
                 if val:
                     extra[field] = val
 
+            # Deep-parse Sysmon Message block when present; structured fields
+            # extracted here win over the coarser desc_parts-based description.
+            if msg_col_sysmon:
+                msg_text = _get(row, "Message")
+                if msg_text:
+                    extra.update(_deep_parse_sysmon_message(msg_text))
+
             events.append(
                 ForensicEvent(
                     timestamp=ts,
@@ -687,7 +754,7 @@ def parse_sysmon_csv(content: str) -> list[ForensicEvent]:
                     source_host=host,
                     user=user,
                     description=description[:1000],
-                    raw_source=RawSource.GENERIC,
+                    raw_source=RawSource.VELOCIRAPTOR if msg_col_sysmon else RawSource.GENERIC,
                     event_id=event_id,
                     extra=extra if extra else None,
                 )

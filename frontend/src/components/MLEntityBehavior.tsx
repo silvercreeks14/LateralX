@@ -27,10 +27,36 @@ const RISK_LABEL: Record<string, string> = {
 // ── Behavioral anomaly helpers ────────────────────────────────────────────────
 
 const BEHAV_TYPE_LABEL: Record<string, string> = {
-  hourly_spike:       'Z-Score Spike',
-  lateral_velocity:   'Lateral Velocity',
-  auth_failure_burst: 'Auth Burst',
-  off_hours_privilege:'Off-Hours Privilege',
+  // existing 4 — unchanged
+  hourly_spike:                      'Z-Score Spike',
+  lateral_velocity:                  'Lateral Velocity',
+  auth_failure_burst:                'Auth Burst',
+  off_hours_privilege:               'Off-Hours Privilege',
+  // exact keys from behavioral.py
+  hourly_event_spike:                'Z-Score Event Spike',
+  kerberos_ticket_spike:             'Kerberoasting Pattern',
+  group_modification_burst:          'Group Modification Burst',
+  privileged_account_creation_chain: 'Account Creation Chain',
+  ntlm_spike:                        'NTLM Auth Spike',
+  ransomware_recovery_destruction:   'Ransomware Indicator',
+  ntlm_brute_force:                  'NTLM Brute Force',
+  pass_the_hash:                     'Pass-the-Hash',
+  wmi_shell_spawn:                   'WMI Shell Spawn',
+  event_log_clearing:                'Event Log Clearing',
+  lsass_pth_correlation:             'LSASS → Lateral Move',
+  golden_ticket:                     'Golden Ticket',
+  silver_ticket:                     'Silver Ticket',
+  // high-confidence single-event rules (Check 0)
+  shadow_copy_deletion:              'Shadow Copy Deletion',
+  boot_recovery_disabled:            'Boot Recovery Disabled',
+  certutil_download:                 'CertUtil Download',
+  bitsadmin_download:                'BITSAdmin Download',
+  mshta_remote_exec:                 'MSHTA Remote Execution',
+  regsvr32_remote_exec:              'Regsvr32 Remote Exec',
+  encoded_powershell:                'Encoded PowerShell',
+  mimikatz_invocation:               'Mimikatz Invocation',
+  dcsync_invocation:                 'DCSync Invocation',
+  lsass_dump_tool:                   'LSASS Dump Tool',
 }
 
 const SEV_BORDER: Record<string, string> = {
@@ -150,7 +176,7 @@ export default function MLEntityBehavior({
           onClick={runBehavioral}
           disabled={behavLoading}
           className="text-xs px-3 py-1.5 rounded border border-cyan-800/40 text-cyan-400 hover:bg-cyan-950/20 disabled:opacity-40 whitespace-nowrap"
-          title="Run deterministic behavioral checks: Z-score spikes, lateral velocity, auth bursts, off-hours privilege"
+          title="Run 13 deterministic behavioral checks: Z-score spikes, lateral velocity, auth bursts, off-hours privilege, Kerberoasting, NTLM brute-force, Pass-the-Hash, WMI shell spawn, ransomware recovery triad, log clearing sweep"
         >
           {behavLoading ? 'Analyzing…' : 'Run Behavioral Checks'}
         </button>
@@ -237,7 +263,7 @@ export default function MLEntityBehavior({
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
           Deterministic Behavioral Checks
           <span className="ml-2 font-normal normal-case text-slate-600">
-            Z-score spike · lateral velocity · auth burst · off-hours privilege
+            15 deterministic checks across credential access, lateral movement, persistence, and impact
           </span>
         </p>
 

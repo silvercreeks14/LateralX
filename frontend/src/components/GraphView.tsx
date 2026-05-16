@@ -30,6 +30,11 @@ const LAYOUTS = [
 
 type LayoutId = typeof LAYOUTS[number]['id']
 
+// Forensic Confidence Slider — filters graph edges by evidence strength
+// Level 0 (All): every edge shown; Level 4 (Confirmed): suspicious-flagged only
+const CONF_LABELS  = ['All', 'Low+', 'Med+', 'High', 'Confirmed'] as const
+const CONF_MIN_COUNT = [1, 2, 4, 8, 999999] as const
+
 const STAGE_META: Record<string, { label: string; border: string; bg: string; text: string; order: number }> = {
   initial_access:       { label: 'Initial Access',       border: '#D97706', bg: '#D9770610', text: '#fcd34d', order: 0 },
   execution:            { label: 'Execution',             border: '#7C3AED', bg: '#7C3AED10', text: '#c4b5fd', order: 1 },
@@ -136,6 +141,7 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
   const [selectedNode, setSelectedNode] = useState<NodeDetail | null>(null)
   const [layout, setLayout] = useState<LayoutId>('breadthfirst')
   const [showSuspiciousOnly, setShowSuspiciousOnly] = useState(false)
+  const [confidenceLevel, setConfidenceLevel] = useState(0)
   const [nodeCount, setNodeCount] = useState(0)
   const [edgeCount, setEdgeCount] = useState(0)
   const [showKillChain, setShowKillChain] = useState(false)
@@ -143,13 +149,157 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
   const [searchTerm, setSearchTerm] = useState('')
   const [searchHits, setSearchHits] = useState(0)
 
+  // Step-through replay — all state, no auto-timer
+  const sortedEdgesRef  = useRef<cytoscape.EdgeSingular[]>([])
+  const replayActiveRef = useRef(false)   // ref copy avoids stale closure in cy tap handler
+  const [replayActive, setReplayActive] = useState(false)
+  const [currentStep,  setCurrentStep]  = useState(0)
+  const [stepTotal,    setStepTotal]    = useState(0)
+  interface StepInfo { time: string; source: string; target: string; suspicious: boolean }
+  const [stepInfo, setStepInfo] = useState<StepInfo | null>(null)
+
   const panelOpen = selectedNode !== null
   useEffect(() => {
     requestAnimationFrame(() => { cyRef.current?.resize() })
   }, [panelOpen, showKillChain])
 
+  // Shared: open node detail panel — used by tap handler AND step nav
+  const openNodeDetail = useCallback((node: cytoscape.NodeSingular) => {
+    const nodeId   = node.data('id')   as string
+    const nodeType = node.data('type') as 'host' | 'user'
+    const connectedEdges = node.connectedEdges()
+    const neighbours     = node.neighborhood().nodes()
+    const edgeCountSum   = connectedEdges.reduce(
+      (sum: number, e: cytoscape.EdgeSingular) => sum + (Number(e.data('count')) || 1), 0,
+    )
+    const timestamps = connectedEdges
+      .map((e: cytoscape.EdgeSingular) => e.data('timestamp') as string)
+      .filter(Boolean).sort()
+
+    setSelectedNode({
+      id: nodeId, type: nodeType, subtype: node.data('subtype'),
+      suspicious: node.data('suspicious'),
+      connections: neighbours.map((n: cytoscape.NodeSingular) => n.data('label')),
+      eventCount: edgeCountSum,
+      firstSeen: timestamps[0] ? timestamps[0].slice(0, 19).replace('T', ' ') : null,
+      activity: [], activityLoading: true,
+    })
+
+    if (nodeId === 'unknown_user') {
+      setSelectedNode(prev => prev && prev.id === nodeId ? { ...prev, activityLoading: false } : prev)
+      return
+    }
+
+    const params: Record<string, string> = nodeType === 'host'
+      ? { host: nodeId, limit: '100' }
+      : { user: nodeId, limit: '100' }
+    if (selectedUploadId != null) params.upload_id = String(selectedUploadId)
+    api.getEvents(params, activeCaseId ?? null)
+      .then(events => {
+        setSelectedNode(prev => prev && prev.id === nodeId
+          ? { ...prev, activity: events, activityLoading: false } : prev)
+      })
+      .catch(() => {
+        setSelectedNode(prev => prev && prev.id === nodeId
+          ? { ...prev, activityLoading: false } : prev)
+      })
+  }, [activeCaseId, selectedUploadId])
+
+  // Reveal edges 0..step cumulatively, update overlay, open target node detail
+  const applyStep = useCallback((step: number) => {
+    const cy    = cyRef.current
+    const edges = sortedEdgesRef.current
+    if (!cy || edges.length === 0 || step < 0 || step >= edges.length) return
+
+    cy.edges().style({ opacity: 0 })
+    cy.nodes().style({ opacity: 0.12 })
+    cy.nodes().removeStyle('border-color border-width border-style')
+
+    for (let i = 0; i <= step; i++) {
+      const e = edges[i]
+      e.style({ opacity: i === step ? 1 : 0.45 })
+      e.source().style({ opacity: 1 })
+      e.target().style({ opacity: 1 })
+      if (e.data('suspicious') === true) {
+        e.source().style({ 'border-width': 3, 'border-color': '#ef4444', 'border-style': 'solid' })
+        e.target().style({ 'border-width': 3, 'border-color': '#ef4444', 'border-style': 'solid' })
+      }
+    }
+
+    const edge = edges[step]
+    const ts   = edge.data('timestamp') as string | undefined
+    setStepInfo({
+      time:      ts ? new Date(ts).toTimeString().slice(0, 8) : '??:??:??',
+      source:    (edge.source().data('label') as string) || (edge.source().data('id') as string),
+      target:    (edge.target().data('label') as string) || (edge.target().data('id') as string),
+      suspicious: edge.data('suspicious') === true,
+    })
+
+    try { cy.fit(edge.source().union(edge.target()), 80) } catch (_) {}
+    openNodeDetail(edge.target())
+  }, [openNodeDetail])
+
+  const exitStepMode = useCallback(() => {
+    const cy = cyRef.current
+    if (cy) {
+      cy.nodes().removeStyle('opacity border-color border-width border-style')
+      cy.edges().removeStyle('opacity')
+      cy.elements().removeClass('faded')
+    }
+    replayActiveRef.current = false
+    setReplayActive(false)
+    setCurrentStep(0)
+    setStepTotal(0)
+    setStepInfo(null)
+    sortedEdgesRef.current = []
+    setSelectedNode(null)
+  }, [])
+
+  const enterStepMode = useCallback(() => {
+    const cy = cyRef.current
+    if (!cy) return
+    const allEdges = cy.edges()
+    if (allEdges.length === 0) return
+    const sorted = allEdges.toArray().sort((a, b) => {
+      const at = a.data('timestamp') ? new Date(a.data('timestamp') as string).getTime() : Infinity
+      const bt = b.data('timestamp') ? new Date(b.data('timestamp') as string).getTime() : Infinity
+      return at - bt
+    })
+    sortedEdgesRef.current = sorted
+    setShowKillChain(false)   // node detail and kill chain are mutually exclusive
+    replayActiveRef.current = true
+    setReplayActive(true)
+    setStepTotal(sorted.length)
+    setCurrentStep(0)
+    applyStep(0)
+  }, [applyStep])
+
+  const stepNext = useCallback(() => {
+    const next = currentStep + 1
+    if (next >= sortedEdgesRef.current.length) return
+    applyStep(next)
+    setCurrentStep(next)
+  }, [currentStep, applyStep])
+
+  const stepBack = useCallback(() => {
+    const prev = currentStep - 1
+    if (prev < 0) return
+    applyStep(prev)
+    setCurrentStep(prev)
+  }, [currentStep, applyStep])
+
   const buildCy = useCallback(() => {
     if (!containerRef.current || !graphData) return
+
+    // Exit step mode before destroying cy — edge refs become invalid after destroy
+    if (replayActiveRef.current) {
+      replayActiveRef.current = false
+      setReplayActive(false)
+      setCurrentStep(0)
+      setStepTotal(0)
+      setStepInfo(null)
+      sortedEdgesRef.current = []
+    }
 
     cyRef.current?.destroy()
     cyRef.current = null
@@ -157,13 +307,29 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
     const allNodes = graphData.elements.nodes
     const allEdges = graphData.elements.edges
 
-    const nodes = showSuspiciousOnly
+    // Confidence filter: level 4 = suspicious-only, levels 1-3 = min edge-count gate
+    const confSuspiciousOnly = confidenceLevel >= 4
+    const minCount = CONF_MIN_COUNT[confidenceLevel as 0 | 1 | 2 | 3 | 4] ?? 1
+
+    const baseEdges = (showSuspiciousOnly || confSuspiciousOnly)
+      ? allEdges.filter(e => e.data.suspicious)
+      : confidenceLevel > 0
+        ? allEdges.filter(e => (e.data.count ?? 1) >= minCount)
+        : allEdges
+
+    // After confidence filtering, only keep nodes that appear in at least one remaining edge
+    const connectedIds = confidenceLevel > 0
+      ? new Set(baseEdges.flatMap(e => [e.data.source, e.data.target]))
+      : null
+
+    const nodes = showSuspiciousOnly || confSuspiciousOnly
       ? allNodes.filter(n => n.data.suspicious || graphData.suspicious_users.includes(n.data.id))
-      : allNodes
+      : confidenceLevel > 0
+        ? allNodes.filter(n => connectedIds!.has(n.data.id))
+        : allNodes
+
     const nodeIds = new Set(nodes.map(n => n.data.id))
-    const edges = showSuspiciousOnly
-      ? allEdges.filter(e => e.data.suspicious && nodeIds.has(e.data.source) && nodeIds.has(e.data.target))
-      : allEdges.filter(e => nodeIds.has(e.data.source) && nodeIds.has(e.data.target))
+    const edges = baseEdges.filter(e => nodeIds.has(e.data.source) && nodeIds.has(e.data.target))
 
     setNodeCount(nodes.length)
     setEdgeCount(edges.length)
@@ -366,60 +532,27 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
 
     cy.on('tap', 'node', (evt) => {
       const node = evt.target
-      cy.elements().addClass('faded')
-      node.removeClass('faded')
-      node.connectedEdges().removeClass('faded')
-      node.neighborhood().removeClass('faded')
-
-      const connectedEdges = node.connectedEdges()
-      const neighbours = node.neighborhood().nodes()
-      const edgeCountSum = connectedEdges.reduce(
-        (sum: number, e: cytoscape.EdgeSingular) => sum + (Number(e.data('count')) || 1), 0,
-      )
-      const timestamps = connectedEdges
-        .map((e: cytoscape.EdgeSingular) => e.data('timestamp') as string)
-        .filter(Boolean).sort()
-
-      const nodeId   = node.data('id')   as string
-      const nodeType = node.data('type') as 'host' | 'user'
-
-      setSelectedNode({
-        id: nodeId, type: nodeType, subtype: node.data('subtype'),
-        suspicious: node.data('suspicious'),
-        connections: neighbours.map((n: cytoscape.NodeSingular) => n.data('label')),
-        eventCount: edgeCountSum,
-        firstSeen: timestamps[0] ? timestamps[0].slice(0, 19).replace('T', ' ') : null,
-        activity: [], activityLoading: true,
-      })
-
-      if (nodeId === 'unknown_user') {
-        setSelectedNode(prev => prev && prev.id === nodeId ? { ...prev, activityLoading: false } : prev)
-        return
+      // In step mode the graph visibility is managed by applyStep — don't fight it with faded classes
+      if (!replayActiveRef.current) {
+        cy.elements().addClass('faded')
+        node.removeClass('faded')
+        node.connectedEdges().removeClass('faded')
+        node.neighborhood().removeClass('faded')
       }
-
-      const params: Record<string, string> = nodeType === 'host'
-        ? { host: nodeId, limit: '100' }
-        : { user: nodeId, limit: '100' }
-      if (selectedUploadId != null) params.upload_id = String(selectedUploadId)
-      api.getEvents(params, activeCaseId ?? null)
-        .then(events => {
-          setSelectedNode(prev => prev && prev.id === nodeId
-            ? { ...prev, activity: events, activityLoading: false } : prev)
-        })
-        .catch(() => {
-          setSelectedNode(prev => prev && prev.id === nodeId
-            ? { ...prev, activityLoading: false } : prev)
-        })
+      openNodeDetail(node)
     })
 
     cy.on('tap', (evt) => {
       if (evt.target === cy) { cy.elements().removeClass('faded'); setSelectedNode(null) }
     })
-  }, [graphData, layout, showSuspiciousOnly, activeCaseId, selectedUploadId])
+  }, [graphData, layout, showSuspiciousOnly, confidenceLevel, activeCaseId, selectedUploadId, openNodeDetail])
 
   useEffect(() => {
     buildCy()
-    return () => { cyRef.current?.destroy(); cyRef.current = null }
+    return () => {
+      cyRef.current?.destroy()
+      cyRef.current = null
+    }
   }, [buildCy])
 
   const fitGraph        = () => cyRef.current?.fit(undefined, 40)
@@ -510,107 +643,173 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
     <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 overflow-hidden">
 
       {/* Toolbar */}
-      <div className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-3">
+      <div className="border-b border-slate-200 dark:border-slate-800">
 
-        {/* Stats */}
-        <div className="flex items-center gap-3 text-xs text-slate-500">
-          <span className="font-medium text-slate-700 dark:text-slate-300">{nodeCount} nodes</span>
-          <span>{edgeCount} edges</span>
-          <span>{graphData.total_logon_events} events</span>
+        {/* Stats row — read-only info, visually separated from controls */}
+        <div className="px-4 py-1.5 flex items-center gap-4 text-xs bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700/50">
+          <span className="text-slate-500">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{nodeCount}</span> nodes
+          </span>
+          <span className="text-slate-500">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{edgeCount}</span> edges
+          </span>
+          <span className="text-slate-500">
+            <span className="font-semibold text-slate-700 dark:text-slate-200">{graphData.total_logon_events}</span> events
+          </span>
+          {hasSuspicious && (
+            <span className="text-red-400 font-semibold">
+              ⚠ {graphData.suspicious_users.length} suspicious
+            </span>
+          )}
           {(graphData.scenario_links ?? 0) > 0 && (
-            <span className="text-amber-500 dark:text-amber-400 font-semibold">
-              {graphData.scenario_links} scenario link{graphData.scenario_links !== 1 ? 's' : ''}
-            </span>
-          )}
-          {hasSuspicious && (
-            <span className="text-red-500 dark:text-red-400 font-semibold">
-              {graphData.suspicious_users.length} suspicious
+            <span className="text-amber-400 font-semibold">
+              ◈ {graphData.scenario_links} scenario link{graphData.scenario_links !== 1 ? 's' : ''}
             </span>
           )}
         </div>
 
-        {/* Node search */}
-        <div className="relative">
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={e => handleSearch(e.target.value)}
-            placeholder="Search nodes…"
-            className="h-7 pl-7 pr-6 text-xs rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
-          />
-          <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          {searchTerm && (
-            <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-xs font-bold ${searchHits > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
-              {searchHits}
-            </span>
-          )}
-        </div>
+        {/* Controls row — grouped with separators, scrolls horizontally on narrow screens */}
+        <div className="px-3 py-2 flex items-center gap-3 overflow-x-auto">
 
-        <div className="flex-1" />
-
-        {/* Layout selector */}
-        <div className="flex items-center gap-1 text-xs">
-          <span className="text-slate-500 mr-1">Layout:</span>
-          {LAYOUTS.map(l => (
-            <button
-              key={l.id}
-              onClick={() => setLayout(l.id)}
-              className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-                layout === l.id ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
-              }`}
+          {/* Layout */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs text-slate-500">Layout</span>
+            <select
+              value={layout}
+              onChange={e => setLayout(e.target.value as LayoutId)}
+              className="h-7 text-xs rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
             >
-              {l.label}
-            </button>
-          ))}
-        </div>
+              {LAYOUTS.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </div>
 
-        {/* Kill Chain toggle — only visible when scenario data exists */}
-        {hasScenario && (
-          <button
-            onClick={() => {
-              setShowKillChain(v => !v)
-              if (showKillChain) handleClear()
-            }}
-            className={`text-xs px-3 py-1 rounded font-medium border transition-colors ${
-              showKillChain
-                ? 'bg-amber-700 text-white border-amber-700'
-                : 'border-amber-700/40 text-amber-400 hover:bg-amber-950/20'
-            }`}
-          >
-            Kill Chain
-          </button>
-        )}
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 shrink-0" />
 
-        {hasSuspicious && (
-          <button
-            onClick={() => setShowSuspiciousOnly(v => !v)}
-            className={`text-xs px-3 py-1 rounded font-medium border transition-colors ${
-              showSuspiciousOnly
-                ? 'bg-red-600 text-white border-red-600'
-                : 'border-red-800/40 text-red-400 hover:bg-red-950/20'
-            }`}
-          >
-            {showSuspiciousOnly ? 'All paths' : 'Suspicious only'}
-          </button>
-        )}
+          {/* Evidence filter */}
+          <div className="flex items-center gap-1.5 shrink-0">
+            <span className="text-xs text-slate-500">Filter</span>
+            <select
+              value={confidenceLevel}
+              onChange={e => setConfidenceLevel(Number(e.target.value))}
+              title="Filter edges by evidence strength — higher levels remove low-confidence detections"
+              className="h-7 text-xs rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 px-2 cursor-pointer focus:outline-none focus:ring-1 focus:ring-blue-500"
+            >
+              {CONF_LABELS.map((label, i) => <option key={i} value={i}>{label}</option>)}
+            </select>
+          </div>
 
-        {/* Labels toggle */}
-        <div className="flex items-center gap-1">
-          <button onClick={zoomIn}   className="w-7 h-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-sm font-bold">+</button>
-          <button onClick={zoomOut}  className="w-7 h-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-sm font-bold">&#8722;</button>
-          <button onClick={fitGraph} className="px-2.5 h-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-xs">Fit</button>
-          {hasSuspicious && (
-            <button onClick={focusSuspicious} className="px-2.5 h-7 flex items-center justify-center rounded bg-orange-950/20 hover:bg-orange-950/30 text-orange-400 text-xs font-medium">Focus</button>
+          {(hasSuspicious || hasScenario) && (
+            <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 shrink-0" />
           )}
-          <button
-            onClick={exportPng}
-            className="w-7 h-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-sm"
-            title="Export graph as PNG"
-          >
-            ↓
-          </button>
+
+          {/* View toggles — only appear when relevant data exists */}
+          {(hasSuspicious || hasScenario) && (
+            <div className="flex items-center gap-1 shrink-0">
+              {hasSuspicious && (
+                <button
+                  onClick={() => setShowSuspiciousOnly(v => !v)}
+                  title={showSuspiciousOnly ? 'Show all paths' : 'Show suspicious paths only'}
+                  className={`h-7 px-2.5 rounded text-xs font-medium transition-colors ${
+                    showSuspiciousOnly
+                      ? 'bg-red-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  Suspicious
+                </button>
+              )}
+              {hasScenario && (
+                <button
+                  onClick={() => { if (replayActive) exitStepMode(); setShowKillChain(v => !v); if (showKillChain) handleClear() }}
+                  title="Toggle kill chain timeline panel"
+                  className={`h-7 px-2.5 rounded text-xs font-medium transition-colors ${
+                    showKillChain
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'
+                  }`}
+                >
+                  Kill Chain
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 shrink-0" />
+
+          {/* Search */}
+          <div className="relative shrink-0">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={e => handleSearch(e.target.value)}
+              placeholder="Search nodes…"
+              className="h-7 pl-7 pr-6 text-xs rounded bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 placeholder-slate-400 focus:outline-none focus:ring-1 focus:ring-blue-500 w-36"
+            />
+            <svg className="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            {searchTerm && (
+              <span className={`absolute right-1.5 top-1/2 -translate-y-1/2 text-xs font-bold ${searchHits > 0 ? 'text-amber-500' : 'text-slate-400'}`}>
+                {searchHits}
+              </span>
+            )}
+          </div>
+
+          <div className="flex-1 min-w-0" />
+
+          {/* Step-through replay */}
+          {!replayActive ? (
+            <button
+              onClick={enterStepMode}
+              title="Step through attack events one at a time — opens node detail at each step"
+              className="h-7 px-2.5 rounded text-xs font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700 shrink-0"
+            >
+              Step
+            </button>
+          ) : (
+            <div className="flex items-center gap-1 shrink-0">
+              <button
+                onClick={stepBack}
+                disabled={currentStep === 0}
+                title="Previous event"
+                className="h-7 w-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-base disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                ←
+              </button>
+              <span className="text-xs font-mono text-slate-500 dark:text-slate-400 px-1.5 tabular-nums whitespace-nowrap">
+                {currentStep + 1} / {stepTotal}
+              </span>
+              <button
+                onClick={stepNext}
+                disabled={currentStep >= stepTotal - 1}
+                title="Next event"
+                className="h-7 w-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-base disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                →
+              </button>
+              <button
+                onClick={exitStepMode}
+                title="Exit step mode — restore full graph"
+                className="h-7 px-2 flex items-center justify-center rounded text-xs font-medium bg-amber-600/20 hover:bg-amber-600/30 text-amber-500"
+              >
+                Exit
+              </button>
+            </div>
+          )}
+
+          <div className="w-px h-5 bg-slate-200 dark:bg-slate-700 shrink-0" />
+
+          {/* View actions */}
+          <div className="flex items-center gap-1 shrink-0">
+            <button onClick={zoomIn}   title="Zoom in"  className="h-7 w-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-bold text-sm">+</button>
+            <button onClick={zoomOut}  title="Zoom out" className="h-7 w-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 font-bold text-sm">−</button>
+            <button onClick={fitGraph} title="Fit all nodes in view" className="h-7 px-2 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-xs">Fit</button>
+            {hasSuspicious && (
+              <button onClick={focusSuspicious} title="Zoom to suspicious nodes" className="h-7 px-2 flex items-center justify-center rounded bg-orange-950/20 hover:bg-orange-950/30 text-orange-400 text-xs font-medium">Focus</button>
+            )}
+            <button onClick={exportPng} title="Export graph as PNG" className="h-7 w-7 flex items-center justify-center rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 text-sm">↓</button>
+          </div>
+
         </div>
       </div>
 
@@ -629,8 +828,17 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
       )}
 
       {/* Graph canvas + panels */}
-      <div className="flex" style={{ height: 560 }}>
+      <div className="flex relative" style={{ height: 560 }}>
         <div ref={containerRef} className="flex-1" />
+        {replayActive && stepInfo && (
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full bg-slate-900/90 text-white font-mono text-xs pointer-events-none z-10 whitespace-nowrap flex items-center gap-2">
+            <span className="text-slate-400">{stepInfo.time}</span>
+            <span className="text-blue-300">{stepInfo.source}</span>
+            <span className="text-slate-500">→</span>
+            <span className={stepInfo.suspicious ? 'text-red-400 font-semibold' : 'text-emerald-300'}>{stepInfo.target}</span>
+            {stepInfo.suspicious && <span className="text-red-400">⚠</span>}
+          </div>
+        )}
 
         {/* Kill Chain side panel — sits alongside the graph, does not replace it */}
         {showKillChain && hasScenario && (

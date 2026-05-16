@@ -4,13 +4,29 @@ Produces a self-contained HTML file suitable for printing or sharing
 with management and legal teams — no external CSS or JS dependencies.
 """
 
+import json as _json
 import math
 import sys
 from collections import Counter
 from datetime import datetime
+from pathlib import Path as _Path
 from backend.schema import RCAResult, ForensicEvent, Case, Note, Upload, MLStats
 from backend.analysis.scoring import severity_label
 from backend.analysis import rules as rules_mod
+from backend.analysis.threat_profiling import profile_attack as _profile_attack
+
+_REMEDIATION_FILE = _Path(__file__).parent.parent / "data" / "remediation_lookup.json"
+
+
+def _load_remediation_lookup() -> dict[str, dict]:
+    try:
+        with open(_REMEDIATION_FILE, encoding="utf-8") as _fh:
+            return {e["technique_id"]: e for e in _json.load(_fh)}
+    except Exception:
+        return {}
+
+
+_REMEDIATION_LOOKUP: dict[str, dict] = _load_remediation_lookup()
 
 
 # ── Suspicious-event detection infrastructure ──────────────────────────────────
@@ -237,6 +253,161 @@ def _mitre_html(techniques: list) -> str:
         for t in techniques
     )
     return _sec("MITRE ATT&amp;CK Techniques", f'<div class="mgrid">{tags}</div>')
+
+
+def _threat_actor_html(technique_ids: list[str]) -> str:
+    try:
+        profiles = _profile_attack(technique_ids)
+    except Exception:
+        return ""
+    if not profiles:
+        return ""
+
+    _conf_color = {"low": "#b8860b", "medium": "#cc6600", "high": "#cc0000"}
+    cards = []
+    for p in profiles:
+        bar_w = min(100, round(p["overlap_pct"]))
+        aliases = ", ".join(p["aliases"][:3]) if p["aliases"] else "—"
+        techs = " ".join(
+            f'<span style="font-family:monospace;font-size:0.75rem;background:#1e2a38;'
+            f'color:#7ec8e3;padding:2px 5px;border-radius:3px">{t}</span>'
+            for t in p["overlap_techniques"]
+        )
+        conf_col = _conf_color.get(p["confidence"], "#888")
+        cards.append(
+            f'<div style="background:#10181f;border:1px solid #1e2a38;border-radius:6px;'
+            f'padding:12px 14px;margin-bottom:10px">'
+            f'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">'
+            f'<span style="font-weight:700;font-size:1rem;color:#e8f4fc">{p["group"]}</span>'
+            f'<span style="background:{conf_col};color:#fff;font-size:0.7rem;padding:2px 8px;'
+            f'border-radius:10px;text-transform:uppercase">{p["confidence"]}</span>'
+            f'</div>'
+            f'<div style="font-size:0.78rem;color:#8899aa;margin-bottom:8px">'
+            f'Origin: {p["origin"]} &nbsp;|&nbsp; Also known as: {aliases}</div>'
+            f'<div style="margin-bottom:6px">'
+            f'<div style="font-size:0.72rem;color:#8899aa;margin-bottom:3px">'
+            f'Overlap: {p["overlap_pct"]}% of group toolkit &nbsp;|&nbsp; '
+            f'Coverage: {p["coverage_pct"]}% of detected techniques</div>'
+            f'<div style="background:#1e2a38;border-radius:4px;height:8px;width:100%">'
+            f'<div style="background:{conf_col};height:8px;border-radius:4px;width:{bar_w}%"></div>'
+            f'</div></div>'
+            f'<div style="font-size:0.75rem;color:#8899aa;margin-bottom:4px">Overlapping techniques:</div>'
+            f'<div style="display:flex;flex-wrap:wrap;gap:4px">{techs}</div>'
+            f'</div>'
+        )
+
+    disclaimer = (
+        '<p style="font-size:0.75rem;color:#6b7a8d;font-style:italic;margin-top:10px">'
+        'Technique overlap is probabilistic. Attribution requires additional intelligence '
+        'beyond technique co-occurrence.</p>'
+    )
+    return _sec("Threat Actor Correlation", "".join(cards) + disclaimer)
+
+
+def _remediation_html(techniques: list) -> str:
+    if not techniques or not _REMEDIATION_LOOKUP:
+        return ""
+
+    _sev_order = {"critical": 0, "high": 1, "medium": 2}
+
+    matched: list[dict] = []
+    seen_tids: set[str] = set()
+    for t in techniques:
+        tid = t.id
+        entry = _REMEDIATION_LOOKUP.get(tid)
+        if entry is None and "." in tid:
+            entry = _REMEDIATION_LOOKUP.get(tid.split(".")[0])
+        if entry and tid not in seen_tids:
+            matched.append(entry)
+            seen_tids.add(tid)
+
+    if not matched:
+        return ""
+
+    matched.sort(key=lambda e: _sev_order.get(e.get("severity", "medium"), 2))
+
+    by_sev: dict[str, list[dict]] = {"critical": [], "high": [], "medium": []}
+    for entry in matched:
+        sev = entry.get("severity", "medium")
+        if sev in by_sev:
+            by_sev[sev].append(entry)
+
+    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+
+    _sev_cfg = {
+        "critical": ("#450a0a", "#ef4444", "#fca5a5", "Immediate Actions Required"),
+        "high":     ("#431407", "#f97316", "#fdba74", "Short-Term Hardening"),
+        "medium":   ("#422006", "#eab308", "#fde68a", "Preventive Measures"),
+    }
+
+    disclaimer = (
+        f'<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;'
+        f'padding:10px 14px;margin-bottom:18px;font-size:12px;color:#0c4a6e">'
+        f'Generated: {now}. Validate all actions with your security team before execution '
+        f'in production. Commands shown target Windows/PowerShell unless noted.</div>'
+    )
+
+    sections = [disclaimer]
+
+    for sev_key in ("critical", "high", "medium"):
+        entries = by_sev[sev_key]
+        if not entries:
+            continue
+        bg, border, text_c, label = _sev_cfg[sev_key]
+
+        banner = (
+            f'<div style="background:{bg};border-left:5px solid {border};'
+            f'padding:10px 16px;border-radius:4px;margin-bottom:14px">'
+            f'<span style="font-size:12px;font-weight:700;color:{text_c};'
+            f'text-transform:uppercase;letter-spacing:1px">{label}</span>'
+            f'<span style="font-size:11px;color:{text_c};opacity:0.7;margin-left:10px">'
+            f'({len(entries)} technique{"s" if len(entries) != 1 else ""})</span>'
+            f'</div>'
+        )
+
+        cards = []
+        for entry in entries:
+            tid   = entry["technique_id"]
+            tname = entry["technique_name"]
+            actions = entry.get("immediate_actions", [])
+            accounts = entry.get("accounts_at_risk", "")
+            reset_req = entry.get("reset_required", False)
+
+            action_items = "".join(
+                f'<li style="padding:6px 0;border-bottom:1px solid #1e293b;font-size:12px;'
+                f'color:#cbd5e1;line-height:1.65;font-family:monospace;list-style:none">'
+                f'<span style="color:{border};font-weight:700;margin-right:6px">{i + 1}.</span>{act}'
+                f'</li>'
+                for i, act in enumerate(actions)
+            )
+
+            reset_html = (
+                f'<div style="background:#7f1d1d;border:1px solid #ef4444;border-radius:4px;'
+                f'padding:6px 12px;margin-top:10px;font-size:11px;font-weight:700;color:#fca5a5">'
+                f'&#9888; Credential reset required for affected accounts</div>'
+            ) if reset_req else ""
+
+            accounts_html = (
+                f'<div style="font-size:11px;color:#94a3b8;font-style:italic;margin-top:8px">'
+                f'Accounts at risk: {accounts}</div>'
+            ) if accounts else ""
+
+            cards.append(
+                f'<div style="background:#0f172a;border:1px solid #1e2a38;border-radius:6px;'
+                f'padding:14px 16px;margin-bottom:10px">'
+                f'<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">'
+                f'<span style="font-family:monospace;font-size:12px;font-weight:700;'
+                f'color:#7dd3fc;background:#0c2340;padding:3px 8px;border-radius:4px">{tid}</span>'
+                f'<span style="font-size:13px;font-weight:700;color:#e2e8f0">{tname}</span>'
+                f'</div>'
+                f'<ul style="padding:0;margin:0">{action_items}</ul>'
+                f'{accounts_html}{reset_html}'
+                f'</div>'
+            )
+
+        sections.append(banner + "".join(cards))
+
+    return _sec("Technique-Specific Remediation Actions", "".join(sections))
 
 
 def _ioc_html(iocs: list, limit: int = 60) -> str:
@@ -908,39 +1079,65 @@ def _exec_summary_html(result: RCAResult, events: list[ForensicEvent],
 </div>""")
 
 
-def _detection_rules_html(result: RCAResult) -> str:
-    sigma_rules = rules_mod.generate_sigma_rules(result.iocs, result.mitre_techniques)
+def _detection_rules_html(result: RCAResult, events: list[ForensicEvent]) -> str:
+    # IOC/MITRE-derived rules
+    ioc_sigma   = rules_mod.generate_sigma_rules(result.iocs, result.mitre_techniques)
+    # Behavioral rules gate on the actual event timeline — always included
+    behav_sigma = rules_mod.generate_behavioral_sigma_rules(events)
+    sigma_rules = ioc_sigma + behav_sigma
+
     snort_rules = rules_mod.generate_snort_rules(result.iocs)
     yara_rules  = rules_mod.generate_yara_rules(result.iocs, result.mitre_techniques)
+    fw_rules    = rules_mod.generate_firewall_rules(result.iocs)
 
-    if not sigma_rules and not snort_rules and not yara_rules:
+    if not sigma_rules and not snort_rules and not yara_rules and not fw_rules:
         return ""
 
-    sigma_entries = ""
-    for r in sigma_rules[:10]:
-        sigma_entries += (
-            f'<div class="rule-entry">'
-            f'<span style="color:#7dd3fc">title:</span> {r["title"]}\n'
-            f'<span style="color:#7dd3fc">id:</span> {r["id"]}\n'
-            f'<span style="color:#7dd3fc">tags:</span> {", ".join(r["tags"])}\n'
-            f'<span style="color:#86efac">detection:</span>\n'
-            f'  keywords: {r["detection"]["keywords"]}'
-            f'</div>'
-        )
+    def _render_sigma(rules: list[dict], cap: int = 12) -> str:
+        out = ""
+        for r in rules[:cap]:
+            tags_str = ", ".join(r.get("tags", []))
+            kw_str   = str(r["detection"].get("keywords", []))
+            badge = (
+                '<span style="background:#134e4a;color:#5eead4;font-size:9px;'
+                'padding:1px 6px;border-radius:3px;margin-left:6px">behavioral</span>'
+                if r.get("_source") == "behavioral" else ""
+            )
+            out += (
+                f'<div class="rule-entry">'
+                f'<span style="color:#7dd3fc">title:</span> {r["title"]}{badge}\n'
+                f'<span style="color:#7dd3fc">id:</span> {r["id"]}\n'
+                f'<span style="color:#7dd3fc">tags:</span> {tags_str}\n'
+                f'<span style="color:#86efac">detection:</span>\n'
+                f'  keywords: {kw_str}'
+                f'</div>'
+            )
+        return out
 
+    sigma_entries = _render_sigma(sigma_rules)
     snort_entries = "".join(
         f'<div class="snort-rule">{rule}</div>' for rule in snort_rules[:10]
     )
-
     yara_entries = "".join(
         f'<div class="rule-entry">{rule}</div>' for rule in yara_rules[:10]
     )
+    fw_entries = "".join(
+        f'<div class="snort-rule" style="color:#fde68a">{rule}</div>'
+        for rule in fw_rules[:20]
+        if rule.strip()
+    )
 
     _sigma_fallback = '<p style="color:#64748b;font-size:12px">No Sigma rules generated.</p>'
-    _snort_fallback = '<p style="color:#64748b;font-size:12px">No IP-based IOCs — no Snort rules.</p>'
+    _snort_fallback = '<p style="color:#64748b;font-size:12px">No IP-based IOCs — no Snort/Suricata rules.</p>'
     _yara_fallback  = '<p style="color:#64748b;font-size:12px">No YARA rules generated.</p>'
+    _fw_fallback    = '<p style="color:#64748b;font-size:12px">No external IP IOCs — no firewall rules.</p>'
+
+    behav_note = (
+        f' <span style="color:#5eead4;font-size:10px">({len(behav_sigma)} behavioral)</span>'
+        if behav_sigma else ""
+    )
     sigma_col = (
-        f'<div class="rule-block"><h4>Sigma Rules ({len(sigma_rules)} generated)</h4>'
+        f'<div class="rule-block"><h4>Sigma Rules ({len(sigma_rules)} generated){behav_note}</h4>'
         f'{sigma_entries or _sigma_fallback}'
         f'</div>'
     )
@@ -950,20 +1147,27 @@ def _detection_rules_html(result: RCAResult) -> str:
         f'</div>'
     )
     snort_col = (
-        f'<div class="rule-block"><h4>Snort / Suricata Rules ({len(snort_rules)} generated)</h4>'
+        f'<div class="rule-block"><h4>Snort / Suricata IDS Rules ({len(snort_rules)} generated)</h4>'
         f'{snort_entries or _snort_fallback}'
+        f'</div>'
+    )
+    fw_col = (
+        f'<div class="rule-block"><h4>Firewall Block Rules — iptables / Windows / Cisco '
+        f'({len([r for r in fw_rules if r.strip()])} lines)</h4>'
+        f'{fw_entries or _fw_fallback}'
         f'</div>'
     )
 
     return _sec(
-        f"Detection Rules — Sigma ({len(sigma_rules)}) · YARA ({len(yara_rules)}) · Snort ({len(snort_rules)})",
-        f'<div class="rules-wrap">{sigma_col}{yara_col}{snort_col}</div>',
+        f"Detection Rules — Sigma ({len(sigma_rules)}) · YARA ({len(yara_rules)}) "
+        f"· IDS ({len(snort_rules)}) · Firewall ({len([r for r in fw_rules if r.strip()])} block entries)",
+        f'<div class="rules-wrap">{sigma_col}{yara_col}{snort_col}{fw_col}</div>',
     )
 
 
 # ── Quick scan report (unchanged structure) ────────────────────────────────────
 
-def generate_quick_scan_report(result: RCAResult) -> str:
+def generate_quick_scan_report(result: RCAResult, events: list[ForensicEvent] | None = None) -> str:
     sev = severity_label(result.severity_score)
     now = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
     score_color = {"CRITICAL": "#ef4444", "HIGH": "#f97316", "MEDIUM": "#eab308", "LOW": "#22c55e"}[sev]
@@ -1015,11 +1219,17 @@ def generate_quick_scan_report(result: RCAResult) -> str:
   </div>
 </div>"""
 
+    if events:
+        detection_html = _detection_rules_html(result, events)
+    else:
+        detection_html = rules_mod.generate_detection_rules_from_techniques_only(result)
+
     body = (
         header + severity_section + notice
         + _mitre_html(result.mitre_techniques)
         + _ioc_html(result.iocs)
         + ml_section
+        + detection_html
         + f'<div class="ftr"><span>Forensic Intelligence Pipeline v4 — Quick Scan Snapshot</span>'
           f'<span>{now}</span></div>'
     )
@@ -1109,10 +1319,12 @@ def generate_report(result: RCAResult, events: list[ForensicEvent]) -> str:
         + _anomalous_html(result.anomalous_events)
         + _suspicious_events_html(events, result)
         + _mitre_html(result.mitre_techniques)
+        + _threat_actor_html([t.id for t in result.mitre_techniques])
+        + _remediation_html(result.mitre_techniques)
         + _ioc_html(result.iocs)
-        + _detection_rules_html(result)
+        + _detection_rules_html(result, events)
         + _dynamic_remediation_html(result, events)
-        + f'<div class="ftr"><span>Forensic Intelligence Pipeline v4</span><span>{now}</span></div>'
+        + f'<div class="ftr"><span>LateralX — Automated Forensic Intelligence Platform</span><span>{now}</span></div>'
     )
 
     return (

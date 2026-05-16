@@ -65,6 +65,7 @@ from backend.analysis.report import generate_report
 from backend.analysis.ioc import iocs_to_csv, iocs_to_stix
 from backend.analysis import attack_classifier as atk_clf
 from backend.analysis.behavioral import analyze_behavior
+from backend.analysis.threat_profiling import profile_attack as _profile_attack
 from backend.analysis.storyline import build_storyline
 from backend.analysis.network_host_correlator import correlate_network_to_host, detect_ddos
 from backend.analysis.ip_identity import IpIdentityTable
@@ -802,7 +803,14 @@ async def run_analysis(
         "ioc_count": len(result.iocs),
         "case_id": case_id,
     }, username=current_user.username)
-    return result
+
+    try:
+        threat_profiles = _profile_attack([t.id for t in result.mitre_techniques])
+    except Exception as exc:
+        log.warning("threat_profiling failed: %s", exc)
+        threat_profiles = []
+
+    return JSONResponse(content={**result.model_dump(mode="json"), "threat_profiles": threat_profiles})
 
 
 @router.post("/analyze/ad-rules", summary="AD rule-based attack detection")
@@ -2519,11 +2527,20 @@ def behavioral_analysis(
     current_user: UserModel = Depends(get_current_user),
 ):
     """
-    Run four behavioral anomaly checks against the loaded events:
-      1. Per-user hourly event spike (Z-score > 2.5)
-      2. Cross-host lateral velocity (> 3 distinct hosts in 30 min)
-      3. Authentication failure burst (> 10 Event 4625 in 5 min)
-      4. Off-hours SeDebugPrivilege assignment (outside 07:00-19:00)
+    Run 13 deterministic behavioral anomaly checks against the loaded events:
+      1.  Per-user hourly event spike (Z-score > 2.5)
+      2.  Cross-host lateral velocity (> 3 distinct hosts in 30 min)
+      3.  Authentication failure burst (> 10 Event 4625 in 5 min)
+      4.  Off-hours SeDebugPrivilege assignment (outside 07:00-19:00)
+      5.  Kerberos ticket spike — > 20 EID 4769 in 10 min (Kerberoasting)
+      6.  Group modification burst — > 3 EID 4728/4732/4735/4756 in 30 min
+      7.  Privileged account creation chain — EID 4720 → EID 4728 in 10 min
+      8.  NTLM spike from non-DC host — > 15 EID 4776 in 5 min (NTLM relay)
+      9.  Ransomware recovery-destruction triad — vssadmin+bcdedit+wbadmin (T1490)
+      10. NTLM brute-force by username — ≥20 EID 4776 failures in 30 min (T1110.003)
+      11. Pass-the-Hash — NTLM lateral logons without Kerberos TGT (T1550.002)
+      12. WMI shell spawn — wmiprvse.exe spawning cmd/powershell (T1047)
+      13. Event log clearing sweep — wevtutil cl across ≥2 hosts (T1070.001)
     Returns a BehavioralReport with all detected anomalies sorted by severity.
     """
     q = db.query(EventModel).order_by(EventModel.timestamp)

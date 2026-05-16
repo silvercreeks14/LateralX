@@ -35,6 +35,7 @@ class ForensicEvent(BaseModel):
             "%Y-%m-%dT%H:%M:%S.%fZ",
             "%Y-%m-%d %H:%M:%S.%f",
             "%m/%d/%Y %H:%M:%S",
+            "%m/%d/%Y %I:%M:%S %p",
             "%Y-%m-%dT%H:%M:%SZ",
         ]
         for fmt in formats:

