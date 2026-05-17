@@ -817,9 +817,21 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     tids_seen  = {s['technique_id'] for s in attack_steps}
     names_seen = {s['technique_name'] for s in attack_steps}
 
-    has_cobalt      = any(
-        re.search(r'\bmsse-\d+|createremotethread', e.description or '', re.I)
-        for e in sorted_events
+    # ── Signal derivation ─────────────────────────────────────────────────────
+    # Text-pattern signals that are not already captured by technique IDs.
+    _any_desc = lambda pat: any(
+        re.search(pat, e.description or '', re.I) for e in sorted_events
+    )
+
+    # Cobalt Strike: MSSE named pipe, CreateRemoteThread, Beacon HTTP, malleable profile
+    has_cobalt      = _any_desc(
+        r'\bmsse-\d+|createremotethread|cobalt.*strike|malleable.*profile'
+        r'|sleep.*jitter\b|beacon.*(?:http|https)|\.beacon\b'
+    )
+    # Metasploit: meterpreter, MSF stager, reverse_tcp/https payloads
+    has_metasploit  = _any_desc(
+        r'\bmeterpreter\b|\bmsf(?:console|venom|payload)\b|reverse_tcp|reverse_https'
+        r'|msf.*staged\b|multi/handler\b'
     )
     has_kerberoast  = 'T1558.003' in tids_seen
     has_asrep       = 'T1558.004' in tids_seen
@@ -832,51 +844,212 @@ def build_storyline(events: list[ForensicEvent]) -> dict:
     has_ntlm_relay  = 'T1557.001' in tids_seen
     has_recon       = any(t in tids_seen for t in ('T1069.002', 'T1087.002', 'T1046'))
     has_lateral     = any(s['tactic'] == 'Lateral Movement' for s in attack_steps)
+    has_ransomware  = 'T1486' in tids_seen
+    has_recovery_inh = 'T1490' in tids_seen or 'T1561' in tids_seen
+    has_service_stop = 'T1489' in tids_seen
+    has_adcs        = 'T1649' in tids_seen
+    has_wmi_lateral = 'T1047' in tids_seen
+    has_zerologon   = 'T1068' in tids_seen and _any_desc(
+        r'\bzerologon\b|cve-2020-1472|nl_auth.*empty|netlogon.*exploit'
+    )
+    has_nopac       = 'T1068' in tids_seen and _any_desc(
+        r'\bnopac\b|cve-2021-42278|cve-2021-42287|samaccountname.*spoof'
+    )
+    has_bloodhound  = _any_desc(
+        r'\bbloodhound\b|\bsharphound\b|Invoke-BloodHound|ADExplorer\b|CollectionMethod\b'
+    )
+    has_encoded_ps  = 'T1059.001' in tids_seen
+    has_sched_task  = 'T1053.005' in tids_seen
+    has_collection  = any(s['tactic'] == 'Collection' for s in attack_steps)
+    has_exfil       = any(s['tactic'] == 'Exfiltration' for s in attack_steps)
+    has_cloud_exfil = 'T1567' in tids_seen
+    has_dns_exfil   = any(t in tids_seen for t in ('T1048.003', 'T1071.004'))
+    has_webshell    = 'T1505.003' in tids_seen
+    has_supply_chain = 'T1195.002' in tids_seen
+    has_lotl_only   = has_lateral and not has_cobalt and not has_metasploit and not has_skeleton and _any_desc(
+        r'\bcertutil\b|\bbitsadmin\b|\bmsiexec\b|\bmshta\b|\bregsvr32\b|\binstallutil\b'
+    )
     n_persist       = len(persistence_mechanisms)
     n_lateral_hosts = len({p['to_host'] for p in lateral_paths})
+
+    # ── Profile matching (most specific → least specific) ─────────────────────
 
     if has_skeleton:
         actor_profile = (
             'APT — Domain persistence via Skeleton Key implant detected. '
-            'Attacker can authenticate as any domain user without knowing their password.'
+            'Attacker can authenticate as any domain user without knowing their password. '
+            'Skeleton Key is a hallmark of prolonged APT dwell (Equation Group, APT41).'
         )
+
+    elif has_ransomware and has_recovery_inh and (has_cobalt or has_kerberoast or has_pth):
+        # Ransomware-as-a-Service operator: Cobalt Strike / Kerberoasting pre-stage + ransomware deployment
+        raas_c2 = 'Cobalt Strike C2' if has_cobalt else ('Kerberoasting' if has_kerberoast else 'PTH lateral')
+        raas_family = ''
+        if _any_desc(r'\bryuk\b'):
+            raas_family = ' (Ryuk/Wizard Spider profile)'
+        elif _any_desc(r'\bconti\b'):
+            raas_family = ' (Conti profile)'
+        elif _any_desc(r'\blockbit\b'):
+            raas_family = ' (LockBit profile)'
+        elif _any_desc(r'\bblackcat\b|\balphv\b'):
+            raas_family = ' (BlackCat/ALPHV profile)'
+        elif _any_desc(r'\brevil\b|\bsodinokibi\b'):
+            raas_family = ' (REvil/Sodinokibi profile)'
+        actor_profile = (
+            f'Ransomware operator{raas_family} — {raas_c2} → lateral movement → '
+            f'recovery inhibition (VSS/bcdedit) → data encryption. '
+            f'RaaS affiliate tradecraft: pre-compromise dwell then destructive payload.'
+        )
+
+    elif has_ransomware and has_recovery_inh:
+        actor_profile = (
+            'Ransomware operator — inhibit system recovery (VSS deletion / bcdedit) + '
+            'data encryption for impact. No pre-stage C2 confirmed; possible manual deployment.'
+        )
+
+    elif has_zerologon:
+        actor_profile = (
+            'ZeroLogon (CVE-2020-1472) exploitation — Netlogon privilege escalation '
+            'bypasses domain controller authentication, granting instant domain admin. '
+            'Rapid privilege escalation without credential theft.'
+        )
+
+    elif has_nopac:
+        actor_profile = (
+            'noPac (CVE-2021-42278/42287) exploitation — SAMAccountName spoofing '
+            'combined with S4U2self escalates any domain user to domain admin. '
+            'Commonly chained with Kerberoasting in post-exploitation frameworks.'
+        )
+
+    elif has_supply_chain:
+        actor_profile = (
+            'Supply chain compromise — trojanized software or package delivery detected. '
+            'Initial access does not require phishing or exposed services; '
+            'trusted software update mechanism used as intrusion vector.'
+        )
+
+    elif has_cobalt and has_kerberoast and has_dcsync and has_golden:
+        actor_profile = (
+            'APT — Full AD domain compromise via Cobalt Strike: '
+            'Beacon C2 → Kerberoasting → DCSync (NTDS extraction) → Golden Ticket forged. '
+            'Indefinite domain persistence established (Wizard Spider / Ryuk pre-cursor profile).'
+        )
+
     elif has_cobalt:
-        actor_profile = 'APT — Cobalt Strike C2 (MSSE named pipe / CreateRemoteThread injection confirmed)'
+        actor_profile = (
+            'APT — Cobalt Strike C2 confirmed (Beacon HTTP/named pipe/CreateRemoteThread). '
+            'Professional red-team or APT operator; '
+            f'{n_lateral_hosts} lateral host(s) reached.'
+        )
+
+    elif has_metasploit:
+        actor_profile = (
+            'Post-exploitation framework — Metasploit/Meterpreter session detected. '
+            f'Reverse shell or staged payload; {n_lateral_hosts} lateral host(s) reached.'
+        )
+
     elif has_kerberoast and has_dcsync and has_golden:
         actor_profile = (
             'APT — Full AD domain compromise chain: '
             'Kerberoasting → DCSync (NTDS extraction) → Golden Ticket forged. '
             'Attacker has indefinite domain persistence.'
         )
+
+    elif has_adcs and (has_lateral or has_pth):
+        actor_profile = (
+            'AD CS abuse — certificate-based credential theft or authentication bypass '
+            '(ESC1–ESC8 style). Forged certificates enable persistent domain authentication '
+            'without password or Kerberos ticket; difficult to revoke without CA intervention.'
+        )
+
+    elif has_bloodhound and (has_kerberoast or has_lateral):
+        actor_profile = (
+            'Targeted AD attack — BloodHound/SharpHound domain reconnaissance detected. '
+            'Attacker mapped all AD attack paths before exploitation; '
+            'technique selection (Kerberoasting / lateral movement) is deliberate and path-optimal.'
+        )
+
+    elif has_kerberoast and has_silver and has_encoded_ps and not has_cobalt:
+        actor_profile = (
+            'APT29/Cozy Bear indicators — Kerberoasting + Silver Ticket forgery + encoded PowerShell. '
+            'KDC-bypass tradecraft without persistent C2 implant; '
+            'consistent with Russian SVR TTPs (NOBELIUM, SolarWinds campaign style).'
+        )
+
+    elif has_wmi_lateral and has_pth and has_sched_task:
+        actor_profile = (
+            'FIN7/Carbanak indicators — WMI-based lateral execution + PTH credential forwarding + '
+            'scheduled task persistence. Financial APT profile: targeted dwell, credential harvesting, '
+            'and data collection before exfiltration.'
+        )
+
     elif has_kerberoast and has_dcsync:
         actor_profile = 'APT — AD credential theft: Kerberoasting + DCSync (NTDS extraction)'
+
     elif has_ntlm_relay and (has_pth or has_ptt):
         actor_profile = (
             'APT — NTLM relay attack with credential forwarding: '
             f'{n_lateral_hosts} host(s) reached via Pass-the-Hash / Pass-the-Ticket'
         )
+
+    elif has_lotl_only and n_lateral_hosts >= 2:
+        actor_profile = (
+            'Living-off-the-Land (LotL) tradecraft — attack conducted entirely with native '
+            'Windows utilities (certutil / BITS / msiexec / mshta / regsvr32) without custom '
+            'malware signatures. Evasion-focused operator; high false-negative risk for AV/EDR.'
+        )
+
     elif (has_pth or has_ptt) and n_lateral_hosts >= 3:
         actor_profile = (
             f'APT — Credential-based lateral movement: '
             f'{n_lateral_hosts} hosts compromised via '
             f'{"Pass-the-Hash" if has_pth else "Pass-the-Ticket"}'
         )
+
+    elif has_exfil and (has_cloud_exfil or has_dns_exfil):
+        exfil_channel = 'cloud storage' if has_cloud_exfil else 'DNS tunneling'
+        actor_profile = (
+            f'Data exfiltration operator — evidence of data collection and exfiltration '
+            f'via {exfil_channel}. '
+            f'Consistent with espionage or financial threat actor with established C2 channel.'
+        )
+
     elif has_asrep and has_lateral:
         actor_profile = 'APT — AS-REP Roasting followed by lateral movement using harvested credentials'
+
     elif has_golden or has_silver:
         ticket_type = 'Golden' if has_golden else 'Silver'
         actor_profile = (
             f'APT — {ticket_type} Ticket attack: forged Kerberos ticket grants '
             f'persistent access without domain credentials'
         )
+
+    elif has_webshell and has_lateral:
+        actor_profile = (
+            'Web-facing intrusion with lateral movement — web shell deployed on internet-exposed '
+            'host used as pivot point into internal network. '
+            'Consistent with opportunistic exploitation of public-facing application (T1190 → T1505.003).'
+        )
+
     elif has_recon and has_kerberoast:
         actor_profile = 'APT — AD reconnaissance (BloodHound/LDAP) followed by Kerberoasting'
+
+    elif has_collection and not has_lateral and n_persist >= 1 and not has_cobalt:
+        actor_profile = (
+            'Insider threat indicators — privileged data collection + persistence mechanism '
+            'without external lateral movement or exploit signatures. '
+            'Consistent with malicious insider or compromised privileged account with established access.'
+        )
+
     elif n_persist >= 4:
         actor_profile = f'Persistent threat actor — {n_persist} distinct persistence mechanisms deployed'
-    elif 'Exploitation for Privilege Escalation' in names_seen:
+
+    elif 'Exploitation for Privilege Escalation' in names_seen or (has_zerologon or has_nopac):
         actor_profile = 'Threat actor exploiting unpatched vulnerability for privilege escalation'
+
     elif 'Bypass User Account Control' in names_seen and n_persist >= 2:
         actor_profile = 'Insider or post-initial-access actor — UAC bypass + persistence'
+
     else:
         actor_profile = 'Threat actor profile requires additional corroborating evidence'
 
