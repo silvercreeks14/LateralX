@@ -126,7 +126,7 @@ _PATTERNS: list[tuple[re.Pattern, str, str, str]] = [
         'T1195.002', 'Compromise Software Supply Chain', 'Initial Access'),
 
     # ── Execution ─────────────────────────────────────────────────────────────
-    (re.compile(r'\bpowershell\b.*-e(?:nc\b|ncodedcommand)|iex.*downloadstring|invoke-expression|invoke-mimikatz|downloadcradle', re.I),
+    (re.compile(r'\bpowershell\b.*-e(?:nc\b|ncodedcommand)|iex.*downloadstring|invoke-expression|downloadcradle', re.I),
         'T1059.001', 'PowerShell', 'Execution'),
     (re.compile(r'\bcmd(?:\.exe)?\b.*(?:/c\s+|/k\s+)(?:net\b|sc\b|reg\b|wmic\b|certutil\b|curl\b|wget\b)|command.*shell.*exec', re.I),
         'T1059.003', 'Windows Command Shell', 'Execution'),

@@ -1,0 +1,2 @@
+{"datetime":"2024-06-10T12:15:00Z","event_id":"1102","hostname":"WORKSTATION-01","username":"tbryant","message":"The audit log was cleared. Subject: Security ID: S-1-5-21-1234567890-tbryant. Account Name: tbryant. Logon ID: 0x3E7."}
+{"datetime":"2024-06-10T12:17:00Z","event_id":"1102","hostname":"FILE-SERVER-01","username":"tbryant","message":"The audit log was cleared. Subject: Security ID: S-1-5-21-1234567890-tbryant. Account Name: tbryant. Logon ID: 0x3E7."}

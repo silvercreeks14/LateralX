@@ -30,7 +30,8 @@ MODEL_PATH = Path("models/isolation_forest.pkl")
 # Minimum distinct users needed for a statistically meaningful model.
 # Below this threshold, the model would overfit to too few samples.
 MIN_TRAINING_USERS = 10
-MIN_SESSION_EVENTS = 5   # users with fewer events are skipped
+MIN_SESSION_EVENTS = 5   # minimum events to include a user in training
+MIN_SCORING_EVENTS = 20  # minimum events for ML model scoring; smaller sessions use heuristic
 
 # Accounts with these name patterns have predictable, repetitive behaviour by design.
 # Scoring them as anomalous produces noise rather than signal.
@@ -492,7 +493,7 @@ def score_all_entities(events: list[ForensicEvent]) -> list[UserAnomalyScore]:
         if _is_service_account(user):
             continue
         # Too few events for the statistical model — use heuristic fallback
-        if len(evs) < MIN_SESSION_EVENTS:
+        if len(evs) < MIN_SCORING_EVENTS:
             scores.append(_heuristic_score(evs))
             continue
 
@@ -517,3 +518,7 @@ def score_all_entities(events: list[ForensicEvent]) -> list[UserAnomalyScore]:
         ))
 
     return sorted(scores, key=lambda s: s.anomaly_score, reverse=True)
+
+
+# Backwards-compat alias used by tests and the accuracy report
+score_all_users = score_all_entities

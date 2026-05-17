@@ -1805,6 +1805,393 @@ def _net001(events):
 
 
 # ---------------------------------------------------------------------------
+# New rules — Credential Dump (CRED-006..007)
+# ---------------------------------------------------------------------------
+
+def _cred006(events):
+    """EID 4688/Sysmon EID 1 — NTDS.dit offline extraction tools.
+
+    Fires on process-creation events whose CommandLine matches known AD database
+    extraction patterns: ntdsutil IFM, esentutl direct access, vssadmin shadow
+    copy targeting NTDS, or a raw file copy of ntds.dit.  Checks both
+    event.description and event.extra["CommandLine"] so it covers Security-log
+    EID 4688 (command-line auditing) and Sysmon EID 1 (deep-parsed extra dict).
+    """
+    hits = []
+    for e in _events_by_eid(events, "4688", "1"):
+        cmdline  = ((e.extra or {}).get("CommandLine") or "").lower()
+        combined = (e.description or "").lower() + " " + cmdline
+        if (
+            ("ntdsutil" in combined and ("ifm" in combined or "create full" in combined))
+            or ("vssadmin" in combined and "ntds" in combined)
+            or ("esentutl" in combined and "ntds.dit" in combined)
+            or ("copy" in combined and "ntds.dit" in combined)
+        ):
+            hits.append((e, combined))
+
+    seen: set[str] = set()
+    out = []
+    for e, combined in hits:
+        entity = e.user or e.source_host or "__unknown__"
+        if entity in seen:
+            continue
+        seen.add(entity)
+        if "ntdsutil" in combined and ("ifm" in combined or "create full" in combined):
+            tool = "ntdsutil IFM (installs-from-media AD DB extraction)"
+        elif "esentutl" in combined:
+            tool = "esentutl.exe targeting ntds.dit"
+        elif "vssadmin" in combined:
+            tool = "vssadmin shadow copy targeting NTDS directory"
+        else:
+            tool = "file copy of ntds.dit"
+        out.append({
+            "entity":    entity,
+            "event_ids": [e.id] if e.id else [],
+            "evidence":  [
+                f"NTDS.dit offline extraction: {tool} at "
+                f"{e.timestamp.strftime('%Y-%m-%d %H:%M')} (EID {e.event_id}) — "
+                f"all domain credential hashes are at risk",
+            ],
+            "timestamp": e.timestamp.isoformat(),
+        })
+    return out
+
+
+def _cred007(events):
+    """Sysmon EID 13 — WDigest UseLogonCredential set to 1.
+
+    Re-enabling WDigest forces Windows to cache credentials in plaintext inside
+    LSASS memory.  EID 13 TargetObject will contain the full registry path
+    (SecurityProviders\\WDigest\\UseLogonCredential) and Details will show
+    DWORD (0x00000001).  Zero false-positive risk on modern Windows.
+    """
+    matches = [
+        e for e in _events_by_eid(events, "13")
+        if _desc_contains(e, "WDigest", "UseLogonCredential")
+        and _desc_contains(e, "SecurityProviders")
+        and _desc_contains(e, "0x00000001", "DWORD (0x00000001)")
+    ]
+    seen: set[str] = set()
+    out = []
+    for e in matches:
+        entity = e.user or e.source_host or "__unknown__"
+        if entity in seen:
+            continue
+        seen.add(entity)
+        out.append({
+            "entity":    entity,
+            "event_ids": [e.id] if e.id else [],
+            "evidence":  [
+                f"WDigest UseLogonCredential registry key set to 1 (Sysmon EID 13) "
+                f"at {e.timestamp.strftime('%Y-%m-%d %H:%M')} — "
+                f"enables plaintext credential caching in LSASS (pre-dumping step, T1112)",
+            ],
+            "timestamp": e.timestamp.isoformat(),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# New rules — Kerberos / CVE (KERB-013)
+# ---------------------------------------------------------------------------
+
+def _kerb013(events):
+    """Zerologon CVE-2020-1472 — computer account password reset indicators.
+
+    Two independent signals:
+      Signal A: ≥3 EID 4742 (computer account changed) from a non-computer,
+                non-SYSTEM subject within 5 minutes — exploit retry pattern.
+      Signal B: EID 4624 type 3 ANONYMOUS LOGON immediately before EID 4742
+                — the exploit uses unauthenticated Netlogon negotiation.
+    """
+    _SYSTEM_ACCOUNTS = frozenset({"nt authority\\system", "system", ""})
+
+    # Filter to suspicious EID 4742 events: subject is not a machine account
+    suspicious_4742 = [
+        e for e in _events_by_eid(events, "4742")
+        if not (e.user or "").endswith("$")
+        and (e.user or "").lower() not in _SYSTEM_ACCOUNTS
+    ]
+
+    seen: set[str] = set()
+    out = []
+
+    # Signal A: burst of ≥3 resets in 5 min from the same source host
+    for entity, count, peak_ts in _sliding_burst(suspicious_4742, 5, 3,
+                                                  lambda e: e.source_host or "__unknown__"):
+        if entity in seen:
+            continue
+        seen.add(entity)
+        evs = [e for e in suspicious_4742 if (e.source_host or "") == entity]
+        out.append({
+            "entity":    entity,
+            "event_ids": [e.id for e in evs if e.id],
+            "evidence":  [
+                f"{count} computer account password resets (EID 4742) in 5 min from "
+                f"{entity!r} — Zerologon CVE-2020-1472 exploit retry pattern",
+            ],
+            "timestamp": peak_ts.isoformat(),
+        })
+
+    # Signal B: ANONYMOUS LOGON type 3 → EID 4742 within 5 min
+    anon_logons = [
+        e for e in _events_by_eid(events, "4624")
+        if _desc_contains(e, "ANONYMOUS LOGON", "Anonymous Logon")
+        and _desc_contains(e, "LogonType: 3", "LogonType:3")
+    ]
+    window = timedelta(minutes=5)
+    for al in anon_logons:
+        host = al.source_host or "__unknown__"
+        if host in seen:
+            continue
+        following = [
+            e for e in suspicious_4742
+            if timedelta(0) <= e.timestamp - al.timestamp <= window
+        ]
+        if not following:
+            continue
+        seen.add(host)
+        eids = [x for x in [al.id] + [e.id for e in following[:3]] if x]
+        out.append({
+            "entity":    host,
+            "event_ids": eids,
+            "evidence":  [
+                f"ANONYMOUS LOGON (EID 4624 type 3) on {host!r} followed by computer "
+                f"account password reset (EID 4742) within 5 min — "
+                f"high-confidence Zerologon indicator (CVE-2020-1472, T1210)",
+            ],
+            "timestamp": al.timestamp.isoformat(),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# New rules — Privilege Escalation (PRIV-012)
+# ---------------------------------------------------------------------------
+
+def _priv012(events):
+    """EID 4624 type 3 → EID 4674 SeImpersonatePrivilege within 10 min.
+
+    A network logon (type 3) by the same entity followed by impersonation-class
+    privilege use indicates token theft after lateral access.  Privilege use
+    without a preceding network logon is normal admin behaviour and does not fire.
+    """
+    _IMPERSONATION_PRIVS = (
+        "SeImpersonatePrivilege",
+        "SeAssignPrimaryTokenPrivilege",
+        "SeTcbPrivilege",
+    )
+    net_logons = sorted(
+        [e for e in _events_by_eid(events, "4624")
+         if _desc_contains(e, "LogonType: 3", "LogonType:3")
+         and e.user and not (e.user or "").endswith("$")],
+        key=lambda e: e.timestamp,
+    )
+    priv_evs = sorted(
+        [e for e in _events_by_eid(events, "4674")
+         if any(_desc_contains(e, p) for p in _IMPERSONATION_PRIVS)],
+        key=lambda e: e.timestamp,
+    )
+    if not net_logons or not priv_evs:
+        return []
+
+    window = timedelta(minutes=10)
+    seen: set[str] = set()
+    out = []
+
+    for nl in net_logons:
+        entity = nl.user or "__unknown__"
+        if entity in seen:
+            continue
+        for pu in priv_evs:
+            if pu.timestamp < nl.timestamp:
+                continue
+            if pu.timestamp - nl.timestamp > window:
+                break  # sorted list — all remaining are also outside the window
+            if (pu.user or "__unknown__") != entity:
+                continue
+            # Identify the specific privilege
+            priv_name = next(
+                (p for p in _IMPERSONATION_PRIVS if _desc_contains(pu, p)),
+                "SeImpersonatePrivilege",
+            )
+            seen.add(entity)
+            out.append({
+                "entity":    entity,
+                "event_ids": [x for x in [nl.id, pu.id] if x],
+                "evidence":  [
+                    f"Token impersonation chain: network logon (EID 4624 type 3) by "
+                    f"{entity!r} at {nl.timestamp.strftime('%H:%M')} followed by "
+                    f"{priv_name} use (EID 4674) within 10 min — "
+                    f"token theft following lateral access (T1134.001)",
+                ],
+                "timestamp": nl.timestamp.isoformat(),
+            })
+            break
+
+    return out
+
+
+# ---------------------------------------------------------------------------
+# New rules — Lateral Movement (LAT-013)
+# ---------------------------------------------------------------------------
+
+def _lat013(events):
+    """DCOM lateral movement: type-3 logon + svchost-spawned DCOM process on same host.
+
+    Three-tier detection for DCOM process spawns:
+      Tier 1 (Sysmon extra dict, highest confidence): ParentImage = svchost.exe
+              AND Image ∈ {mmc, excel, word, outlook, powershell}.
+      Tier 2 (CommandLine flag): -Embedding in CommandLine — Windows DCOM activation.
+      Tier 3 (tool keyword): dcomcnfg in description/CommandLine.
+
+    The spawn is correlated with a type-3 network logon on the same source_host
+    within 15 minutes before the spawn.  Both events are recorded on the *target*
+    host, so source_host matching is sufficient for cross-host correlation.
+    """
+    _DCOM_CHILDREN = frozenset({
+        "mmc.exe", "excel.exe", "word.exe", "outlook.exe", "powershell.exe",
+    })
+
+    dcom_spawns = []
+    for e in _events_by_eid(events, "1", "4688"):
+        cmdline    = ((e.extra or {}).get("CommandLine") or "").lower()
+        parent_img = ((e.extra or {}).get("ParentImage") or "").lower()
+        child_img  = ((e.extra or {}).get("Image") or "").lower()
+        combined   = (e.description or "").lower() + " " + cmdline
+
+        if parent_img and "svchost" in parent_img and any(ch in child_img for ch in _DCOM_CHILDREN):
+            dcom_spawns.append(e)
+        elif "-embedding" in combined:
+            dcom_spawns.append(e)
+        elif "dcomcnfg" in combined:
+            dcom_spawns.append(e)
+
+    if not dcom_spawns:
+        return []
+
+    net_logons = sorted(
+        [e for e in _events_by_eid(events, "4624")
+         if _desc_contains(e, "LogonType: 3", "LogonType:3")
+         and e.user
+         and not (e.user or "").endswith("$")
+         and not _desc_contains(e, "ANONYMOUS LOGON", "Anonymous Logon")],
+        key=lambda e: e.timestamp,
+    )
+    if not net_logons:
+        return []
+
+    window = timedelta(minutes=15)
+    seen: set[str] = set()
+    out = []
+
+    for spawn in dcom_spawns:
+        host = spawn.source_host or "__unknown__"
+        if host in seen:
+            continue
+        preceding = [
+            nl for nl in net_logons
+            if nl.source_host == host
+            and timedelta(0) <= spawn.timestamp - nl.timestamp <= window
+        ]
+        if not preceding:
+            continue
+        seen.add(host)
+        actors    = {nl.user for nl in preceding if nl.user}
+        actor_str = ", ".join(sorted(actors)) or host
+        child_proc = (
+            (spawn.extra or {}).get("Image")
+            or spawn.event_type
+            or "unknown"
+        )
+        out.append({
+            "entity":    actor_str,
+            "event_ids": [x for x in [preceding[0].id, spawn.id] if x],
+            "evidence":  [
+                f"DCOM lateral movement on {host!r}: network logon (EID 4624 type 3) "
+                f"by {actor_str!r} followed by DCOM process spawn {child_proc!r} "
+                f"within 15 min (EID {spawn.event_id}) — "
+                f"remote DCOM activation via svchost.exe (T1021.003)",
+            ],
+            "timestamp": preceding[0].timestamp.isoformat(),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
+# CRED-008 / KERB-014 additions
+# ---------------------------------------------------------------------------
+
+def _cred008(events):
+    """Sysmon EID 10 with lsass.exe TargetImage and PROCESS_ALL_ACCESS (0x1FFFFF)
+    or other highly-privileged read masks (0x1438, 0x143a) not caught by DCS-006.
+    Excludes known-safe SourceImage OS processes (svchost, werfault, wmiprvse).
+    T1003.001.
+    """
+    _DANGEROUS_MASKS = frozenset({"0x1fffff", "0x1438", "0x143a", "0x1010", "0x1f1fff"})
+    _SAFE_SOURCES = frozenset({"svchost.exe", "werfault.exe", "wmiprvse.exe", "msiexec.exe"})
+
+    out = []
+    seen: set[str] = set()
+    for e in _events_by_eid(events, "10"):
+        if not _desc_contains(e, "lsass.exe", "lsass"):
+            continue
+        target = ((e.extra or {}).get("TargetImage") or e.description or "").lower()
+        if "lsass" not in target:
+            continue
+        ga = ((e.extra or {}).get("GrantedAccess") or "").lower()
+        if not any(mask in ga or mask in (e.description or "").lower()
+                   for mask in _DANGEROUS_MASKS):
+            continue
+        src = ((e.extra or {}).get("SourceImage") or "").lower()
+        src_base = src.rsplit("\\", 1)[-1] if "\\" in src else src
+        if src_base in _SAFE_SOURCES:
+            continue
+        entity = e.user or e.source_host or "__unknown__"
+        if entity in seen:
+            continue
+        seen.add(entity)
+        out.append({
+            "entity":    entity,
+            "event_ids": [e.id] if e.id else [],
+            "evidence":  [
+                f"LSASS process access with PROCESS_ALL_ACCESS or high-privilege mask "
+                f"({ga or 'unknown'}) by {src or 'unknown'} — credential dumping (T1003.001)"
+            ],
+            "timestamp": e.timestamp.isoformat(),
+        })
+    return out
+
+
+def _kerb014(events):
+    """EID 4769 RC4-only burst: ≥8 Kerberos service ticket requests with etype 0x17
+    (RC4-HMAC) from one user within 10 minutes — encryption downgrade or ticket harvesting
+    for Kerberoasting/Pass-the-Ticket. Distinct from KERB-012 (mixed-enc fingerprint).
+    T1558.003 / T1550.003.
+    """
+    bursts = _sliding_burst(
+        [e for e in _events_by_eid(events, "4769")
+         if _desc_contains(e, "0x17")
+         and e.user and not (e.user or "").endswith("$")],
+        window_min=10,
+        threshold=8,
+        key_fn=lambda e: e.user or "__unknown__",
+    )
+    out = []
+    for user, count, peak_ts in bursts:
+        out.append({
+            "entity":    user,
+            "event_ids": [],
+            "evidence":  [
+                f"{count} RC4-encrypted Kerberos service tickets (etype 0x17) requested by "
+                f"{user!r} within 10 min — RC4 downgrade / Kerberoasting harvesting (T1558.003)"
+            ],
+            "timestamp": peak_ts.isoformat(),
+        })
+    return out
+
+
+# ---------------------------------------------------------------------------
 # Rule registry
 # ---------------------------------------------------------------------------
 
@@ -1893,6 +2280,19 @@ AD_RULES: list[ADRule] = [
     ADRule("TOOL-003", "Impacket/CME Tool Signature",     "Tool Detection",  "high",     "T1557.001", "Credential Access", "medium", _tool003),
     # ── Exfiltration ──────────────────────────────────────────────────────────
     ADRule("NET-001",  "Large Outbound Data Transfer",    "Exfiltration",    "high",     "T1041",     "Exfiltration",      "medium", _net001),
+    # ── Credential Dump ───────────────────────────────────────────────────────
+    ADRule("CRED-006", "NTDS.dit Offline Extraction",     "Credential Dump", "critical", "T1003.003", "Credential Access", "high",   _cred006),
+    ADRule("CRED-007", "WDigest Plaintext Caching",       "Credential Access","high",    "T1112",     "Defense Evasion",   "high",   _cred007),
+    # ── Zerologon / CVE ───────────────────────────────────────────────────────
+    ADRule("KERB-013", "Zerologon CVE-2020-1472",         "Kerberoasting",   "critical", "T1210",     "Lateral Movement",  "high",   _kerb013),
+    # ── Privilege Escalation (token chain) ────────────────────────────────────
+    ADRule("PRIV-012", "Token Impersonation Chain",       "Privilege Escalation","high", "T1134.001", "Privilege Escalation","high", _priv012),
+    # ── Lateral Movement (DCOM spawn) ─────────────────────────────────────────
+    ADRule("LAT-013",  "DCOM Lateral Spawn",              "Lateral Movement","high",     "T1021.003", "Lateral Movement",  "high",   _lat013),
+    # ── Credential Dump (LSASS all-access) ───────────────────────────────────
+    ADRule("CRED-008", "LSASS All-Access Handle",         "Credential Dump", "critical", "T1003.001", "Credential Access", "high",   _cred008),
+    # ── Kerberos RC4 downgrade burst ─────────────────────────────────────────
+    ADRule("KERB-014", "Kerberos RC4 Downgrade Burst",    "Kerberoasting",   "high",     "T1558.003", "Credential Access", "high",   _kerb014),
 ]
 
 _SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3}

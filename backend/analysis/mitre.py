@@ -24,6 +24,44 @@ _T1003_BENIGN_GA = frozenset({
     "0x3000",   # PROCESS_QUERY_LIMITED_INFORMATION | PROCESS_SET_LIMITED_INFORMATION
 })
 
+# OS processes that access lsass legitimately (WER, WMI, Group Policy, antivirus host).
+# Exclude them from EID-10 T1003 detection regardless of GrantedAccess value.
+_T1003_SAFE_SOURCES = frozenset({
+    "svchost.exe",
+    "werfault.exe",
+    "wmiprvse.exe",
+    "msiexec.exe",
+    "services.exe",
+    "wininit.exe",   # parent of lsass; has legitimate handle for process tracking
+    "csrss.exe",
+    "smss.exe",
+    "lsm.exe",       # Local Session Manager
+})
+
+# OS images that legitimately write registry keys — used by T1082/T1484.001/T1547.001 guards
+# to suppress EID-12/13 events from known-good system processes.
+_SAFE_REG_WRITERS = frozenset({
+    "system",        # kernel (no path)
+    "svchost.exe",
+    "winlogon.exe",
+    "services.exe",
+    "lsass.exe",
+    "csrss.exe",
+    "wininit.exe",
+    "smss.exe",
+    "spoolsv.exe",
+    "taskhostw.exe",
+    "explorer.exe",
+    "logonui.exe",   # Windows logon UI — writes CurrentVersion\Winlogon for lock screen
+    "userinit.exe",
+    "dwm.exe",
+})
+
+
+def _img_basename(extra: dict | None) -> str:
+    img = (extra or {}).get("Image", "").lower()
+    return img.rsplit("\\", 1)[-1] if "\\" in img else img
+
 
 def _guard_t1003(event, combined: str) -> bool:
     eid = event.event_id
@@ -33,14 +71,42 @@ def _guard_t1003(event, combined: str) -> bool:
     if eid in ("5156", "5158", "3", "12", "13"):
         return False
     # EID 10 (ProcessAccess): only signal when lsass is the TARGET with a non-benign
-    # GrantedAccess mask. Benign system processes (svchost) use read-only masks; attackers
-    # (PowerShell via Mimikatz/Empire PTH) use 0x1010 / 0x1038.
+    # GrantedAccess mask AND the caller is not a trusted OS process.
     if eid == "10":
         target = (event.extra or {}).get("TargetImage", "").lower()
         if "lsass" not in target:
             return False
         ga = (event.extra or {}).get("GrantedAccess", "").lower()
         if ga in _T1003_BENIGN_GA:
+            return False
+        src = (event.extra or {}).get("SourceImage", "").lower()
+        src_base = src.rsplit("\\", 1)[-1] if "\\" in src else src
+        if src_base in _T1003_SAFE_SOURCES:
+            return False
+    return True
+
+
+def _guard_t1082(event, combined: str) -> bool:
+    # EID 12/13: registry key events can contain discovery tool names in their value data
+    # (e.g., scheduled task XML storing "systeminfo") — T1082 requires process execution,
+    # not a registry write. Suppress all registry events for this technique.
+    return event.event_id not in ("12", "13")
+
+
+def _guard_t1484001(event, combined: str) -> bool:
+    # EID 12/13: svchost.exe and other OS processes write GPO registry keys during
+    # legitimate Group Policy processing — exclude known safe system processes.
+    if event.event_id in ("12", "13"):
+        if _img_basename(event.extra) in _SAFE_REG_WRITERS:
+            return False
+    return True
+
+
+def _guard_t1547001(event, combined: str) -> bool:
+    # EID 12/13: winlogon.exe writes currentversion\winlogon during profile loads;
+    # svchost.exe writes run-key paths during service registration — both are benign.
+    if event.event_id in ("12", "13"):
+        if _img_basename(event.extra) in _SAFE_REG_WRITERS:
             return False
     return True
 
@@ -85,11 +151,19 @@ _GUARDS: dict[str, object] = {
     "T1021.002": _guard_t1021002,
     "T1047":     _guard_t1047,
     "T1027":     _guard_t1027,
+    "T1082":     _guard_t1082,
+    "T1484.001": _guard_t1484001,
+    "T1547.001": _guard_t1547001,
 }
 
 # (trigger_keywords, technique) — first match per technique ID wins
 _MAP: list[tuple[list[str], MitreTechnique]] = [
-    (["certutil", "urlcache", "bitsadmin /transfer"],
+    # Ingress tool transfer — expanded to cover Cobalt Strike, Sliver, and Havoc download paths.
+    # start-bitstransfer: Cobalt Strike BITS staging; invoke-webrequest / wget.exe / curl.exe:
+    # used by virtually every C2 framework as an alternative to certutil.
+    (["certutil", "urlcache", "bitsadmin /transfer",
+      "start-bitstransfer", "invoke-webrequest -uri", "wget.exe", "curl.exe -o",
+      "downloadfile(", "downloaddata("],
      MitreTechnique(id="T1105", name="Ingress Tool Transfer", tactic="Command and Control")),
 
     (["vssadmin delete", "wmic shadowcopy delete", "shadowcopy delete"],
@@ -98,11 +172,22 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
     (["mshta"],
      MitreTechnique(id="T1218.005", name="Mshta", tactic="Defense Evasion")),
 
-    (["wmic"],
+    # WMI execution — expanded to cover PowerShell-based WMI invocation (Invoke-WMIMethod,
+    # Register-WMIEvent) used by Cobalt Strike and PowerLurk for agentless lateral execution
+    # and event-subscription persistence respectively.
+    (["wmic", "win32_process create", "invoke-wmimethod", "register-wmievent",
+      "commandlinetemplate", "activescriptconsumer"],
      MitreTechnique(id="T1047", name="Windows Management Instrumentation", tactic="Execution")),
 
     (["-encodedcommand", "-enc ", "powershell.exe -enc"],
      MitreTechnique(id="T1059.001", name="PowerShell (Encoded)", tactic="Execution")),
+
+    # Download-cradle variants used by non-Empire C2 frameworks (Cobalt Strike, Sliver, Havoc).
+    # These appear in EID 4104 ScriptBlock logs where the word "powershell" may not be present.
+    (["invoke-expression", "iex (", ".downloadstring(", ".downloadfile(",
+      "net.webclient", "invoke-restmethod", "invoke-webrequest",
+      "system.net.webclient", "new-object net."],
+     MitreTechnique(id="T1059.001", name="PowerShell (Download Cradle)", tactic="Execution")),
 
     (["powershell"],
      MitreTechnique(id="T1059.001", name="PowerShell", tactic="Execution")),
@@ -113,7 +198,12 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
     (["regsvr32"],
      MitreTechnique(id="T1218.010", name="Regsvr32", tactic="Defense Evasion")),
 
-    (["net use", "psexec", "\\admin$", "\\c$", "\\ipc$", "\\d$", "logon type: 3"],
+    # SMB/Admin Shares — extended with Impacket tool names used by non-Empire frameworks.
+    # smbexec / wmiexec / dcomexec are Impacket suites used by Cobalt Strike, CrackMapExec,
+    # Sliver, and custom ransomware operators as psexec alternatives.
+    (["net use", "psexec", "\\admin$", "\\c$", "\\ipc$", "\\d$",
+      "logon type: 3", "logon type: 9",    # Type 9 = NewCredentials (over-pass-the-hash)
+      "smbexec", "wmiexec", "dcomexec", "atexec"],
      MitreTechnique(id="T1021.002", name="SMB/Windows Admin Shares", tactic="Lateral Movement")),
 
     # RDP lateral movement: require session-hijack tool or explicit type-10 logon context
@@ -179,7 +269,8 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
       "ntlm hash logon"],
      MitreTechnique(id="T1550.002", name="Pass the Hash", tactic="Lateral Movement")),
 
-    (["pass-the-ticket", "rubeus ptt", "kerberos::ptt", "use ticket"],
+    (["pass-the-ticket", "rubeus ptt", "kerberos::ptt", "use ticket",
+      "rubeus.exe", "rubeus asktgt", "/ptt"],  # Rubeus process + PTT injection flag
      MitreTechnique(id="T1550.003", name="Pass the Ticket", tactic="Lateral Movement")),
 
     (["skeleton key", "misc::skeleton", "patching lsass"],
@@ -212,7 +303,9 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
       "whoami /groups", "hostname.exe"],
      MitreTechnique(id="T1082", name="System Information Discovery", tactic="Discovery")),
 
-    (["schtasks", "at.exe"],
+    # EID 4698 "A scheduled task was created" fires on any task-creation event, including
+    # attacker persistence without schtasks.exe in the command line.
+    (["schtasks", "at.exe", "scheduled task was created", "task name:"],
      MitreTechnique(id="T1053.005", name="Scheduled Task", tactic="Persistence")),
 
     # Change C: "run\\" was matching ClickToRun\OfficeClickToRun paths. Use specific
@@ -243,6 +336,35 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
 
     (["set-domainobject", "set-addomainmode", "gpupdate /force", "domain policy"],
      MitreTechnique(id="T1484.001", name="Domain Policy Modification", tactic="Defense Evasion")),
+
+    # Process Injection (T1055) — Win32/NT API calls appearing in Sysmon EID 1/10 CommandLine or
+    # ScriptBlock text. Cobalt Strike uses VirtualAllocEx+WriteProcessMemory+CreateRemoteThread;
+    # Sliver uses similar Go-native syscall wrappers; Havoc uses NtCreateThread variants.
+    # APC injection (QueueUserAPC) is used by CS sleep obfuscation and process-injection modules.
+    (["virtualallocex", "writeprocessmemory", "createremotethread",
+      "ntcreatethread", "ntallocatevirtualmemory", "queueuserapc",
+      "process hollowing", "reflective dll", "shellcode injection",
+      "ntunmapviewofsection"],
+     MitreTechnique(id="T1055", name="Process Injection", tactic="Defense Evasion")),
+
+    # System Network Configuration Discovery (T1016) — recon commands common to all C2 frameworks
+    # during the post-exploitation discovery phase (Empire, Cobalt Strike, Sliver, Havoc alike).
+    (["ipconfig /all", "netstat -ano", "arp -a", "route print",
+      "get-netadapter", "get-netipaddress", "nbtstat -a"],
+     MitreTechnique(id="T1016", name="System Network Configuration Discovery", tactic="Discovery")),
+
+    # System Network Connections Discovery (T1049) — listing active connections.
+    # Distinct from T1016; these reveal active C2 channels and lateral movement targets.
+    (["netstat -an", "get-nettcpconnection", "get-netudpendpoint",
+      "ss -tlnp", "netstat -b"],
+     MitreTechnique(id="T1049", name="System Network Connections Discovery", tactic="Discovery")),
+
+    # Rundll32 proxy execution (T1218.011) — used by Cobalt Strike, Havoc, and custom loaders
+    # to execute shellcode or DLL payloads via signed Windows binary.
+    (["rundll32.exe javascript", "rundll32 javascript",
+      "rundll32.exe http", "rundll32 comsvcs",
+      "rundll32.exe shell32", "rundll32.exe url.dll"],
+     MitreTechnique(id="T1218.011", name="Rundll32", tactic="Defense Evasion")),
 ]
 
 _TACTIC_ORDER = [

@@ -59,6 +59,14 @@ _WEIGHTS: dict[str, int] = {
 # credential compromise chain → force CRITICAL regardless of other weights.
 _AD_FULL_COMPROMISE_SET = frozenset({"T1003.006", "T1558.001", "T1558.003"})
 
+# Kerberos-only techniques: apply a 30% weight discount when there is no
+# accompanying lateral movement (suspicious_users) or credential dump (T1003.x),
+# since isolated Kerberos recon without follow-up is lower-confidence.
+_KERBEROS_ONLY_TECHNIQUES = frozenset({
+    "T1558.001", "T1558.002", "T1558.003", "T1558.004",
+    "T1550.002", "T1550.003",
+})
+
 # Attack-specific artefacts that reliably indicate malicious activity
 _HIGH_SIGNAL_KEYWORDS = frozenset({
     "certutil", "mimikatz", "lsass", "vssadmin", "psexec", "mshta",
@@ -85,8 +93,22 @@ def calculate_severity(
     """
     score = 0
 
+    # Determine whether any lateral movement or credential-dump technique is present.
+    # If not, Kerberos-only techniques get a 30% discount to reduce false-positive
+    # severity on isolated recon that hasn't progressed to actual compromise.
+    has_lateral_or_dump = bool(suspicious_users) or any(
+        t.id.startswith("T1003.") or t.id.startswith("T1021.")
+        for t in mitre_techniques
+    )
+
+    def _effective_weight(t: MitreTechnique) -> int:
+        w = _WEIGHTS.get(t.id, 2)
+        if not has_lateral_or_dump and t.id in _KERBEROS_ONLY_TECHNIQUES:
+            return int(w * 0.7)
+        return w
+
     # MITRE weights (capped at 40)
-    score += min(sum(_WEIGHTS.get(t.id, 2) for t in mitre_techniques), 40)
+    score += min(sum(_effective_weight(t) for t in mitre_techniques), 40)
 
     # Lateral movement flagged by graph analysis
     if suspicious_users:

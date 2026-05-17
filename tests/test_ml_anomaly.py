@@ -103,7 +103,7 @@ def test_score_all_users_no_model_returns_heuristic(tmp_path, monkeypatch):
     results = score_all_users(events)
     assert len(results) == 1
     assert results[0].confidence == "insufficient_data"
-    assert results[0].user == "alice"
+    assert results[0].entity == "alice"
 
 
 def test_score_all_users_sparse_user_uses_heuristic(tmp_path, monkeypatch):
@@ -138,4 +138,4 @@ def test_score_all_users_sparse_user_uses_heuristic(tmp_path, monkeypatch):
     results = score_all_users(events)
     assert len(results) == 1
     assert results[0].confidence == "insufficient_data"
-    assert results[0].user == "sparse_user"
+    assert results[0].entity == "sparse_user"

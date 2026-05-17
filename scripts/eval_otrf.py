@@ -485,6 +485,9 @@ def download_datasets() -> None:
 BEHAVIORAL_TO_MITRE: dict[str, set[str]] = {
     "wmi_shell_spawn":                   {"T1047"},
     "pass_the_hash":                     {"T1550.002"},
+    "pass_the_ticket":                   {"T1550.003"},
+    "smb_lateral_movement":              {"T1021.002"},
+    "rdp_lateral_movement":              {"T1021.001"},
     "kerberos_ticket_spike":             {"T1558.003"},
     "ntlm_brute_force":                  {"T1110.003", "T1110"},
     "ransomware_recovery_destruction":   {"T1490"},

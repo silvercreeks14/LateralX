@@ -212,7 +212,7 @@ class TestBehavioral:
         from backend.analysis.behavioral import analyze_behavior
         report = analyze_behavior(events)
         vel_anomalies = [a for a in report["anomalies"] if a["anomaly_type"] == "lateral_velocity"]
-        jdoe_vel = [a for a in vel_anomalies if a["user"] == "jdoe"]
+        jdoe_vel = [a for a in vel_anomalies if a["entity"] == "jdoe"]
         assert jdoe_vel, (
             f"Expected lateral_velocity for jdoe (hits WORKSTATION-06, DC-01, FILESERVER-01). "
             f"All velocity anomalies: {vel_anomalies}"
@@ -232,7 +232,7 @@ class TestBehavioral:
         report = analyze_behavior(events)
         off_hours = [
             a for a in report["anomalies"]
-            if a["anomaly_type"] == "off_hours_privilege" and a["user"] == "ltorres"
+            if a["anomaly_type"] == "off_hours_privilege" and a["entity"] == "ltorres"
         ]
         assert not off_hours, (
             f"ltorres privilege at 16:22 is inside business hours — should not be flagged. Got: {off_hours}"
@@ -249,7 +249,7 @@ class TestBehavioral:
         report = analyze_behavior(events + [night_event])
         off_hours = [
             a for a in report["anomalies"]
-            if a["anomaly_type"] == "off_hours_privilege" and a["user"] == "hacker"
+            if a["anomaly_type"] == "off_hours_privilege" and a["entity"] == "hacker"
         ]
         assert off_hours, "Expected off_hours_privilege at 02:15 to fire"
 
@@ -257,10 +257,10 @@ class TestBehavioral:
         from backend.analysis.behavioral import analyze_behavior
         report = analyze_behavior(events)
         assert "anomalies" in report
-        assert "profiled_users" in report
+        assert "profiled_entities" in report
         assert "analysis_window_hours" in report
         assert "highest_severity" in report
-        assert report["profiled_users"] > 0
+        assert report["profiled_entities"] > 0
 
     def test_empty_events_returns_empty_report(self):
         from backend.analysis.behavioral import analyze_behavior

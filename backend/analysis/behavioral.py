@@ -20,6 +20,9 @@ Detects statistical anomalies in user/host behavior using 15 complementary check
   15. Golden / Silver Ticket            — EID 4769 with RC4 (0x17) encryption:
                                           Golden: forged options (0x40810000) or anomalous lifetime
                                           Silver: host-specific service + no prior TGT (T1558.001/002)
+  16. SMB lateral movement              — EID 4624 LogonType 3 to ≥3 hosts in 30 min (T1021.002)
+  17. Pass-the-Ticket                   — EID 4769 RC4 for lateral service + no prior TGT (T1550.003)
+  18. RDP lateral movement              — EID 4624 LogonType 10 to ≥2 hosts in 30 min (T1021.001)
 
 None of these checks require training data — they are fully deterministic and run in O(n).
 """
@@ -57,6 +60,11 @@ PTH_MIN_LATERAL_LOGONS      = 2    # ≥N NTLM lateral logons without Kerberos T
 LOG_CLEAR_HOST_THRESHOLD    = 2    # ≥N distinct hosts clearing logs within session → sweep
 SILVER_TICKET_TGT_WINDOW_MIN = 20  # no EID 4768 from user in this look-back → Silver Ticket
 GOLDEN_TICKET_LIFETIME_MIN  = 600  # anomalous lifetime threshold (minutes) for Golden Ticket
+SMB_LATERAL_WINDOW_MIN      = 30   # EID 4624 LogonType 3 to N+ hosts in this window
+SMB_LATERAL_HOST_THRESHOLD  = 3    # ≥N distinct target hosts → SMB lateral flag
+RDP_LATERAL_WINDOW_MIN      = 30   # EID 4624 LogonType 10 to N+ hosts in this window
+RDP_LATERAL_HOST_THRESHOLD  = 2    # ≥N distinct target hosts → RDP lateral flag
+PTT_LOOKBACK_MIN            = 30   # look-back window for TGT before tagging pass-the-ticket
 
 # Ticket options that indicate a forged Golden Ticket (forwardable|renewable|canonicalize)
 _GOLDEN_TICKET_OPTIONS = frozenset({"0x40810000", "0x40810010", "0x60810010"})
@@ -233,9 +241,14 @@ def _check_off_hours_privilege(events: list[ForensicEvent]) -> list[dict]:
     ]
 
     anomalies = []
+    seen: set[tuple[str, str]] = set()
     for e in priv_events:
         hour = e.timestamp.hour
         if not (WORK_HOUR_START <= hour < WORK_HOUR_END):
+            key = (e.user, e.timestamp.strftime('%Y-%m-%d'))
+            if key in seen:
+                continue
+            seen.add(key)
             anomalies.append({
                 'anomaly_type': 'off_hours_privilege',
                 'entity': e.user,
@@ -476,10 +489,10 @@ def _check_ransomware_triad(events: list[ForensicEvent]) -> list[dict]:
     Fires on ≥2-of-3 members (medium) or all 3 (high).
     """
     def _is_vssadmin(d: str) -> bool:
-        return "vssadmin" in d and ("delete" in d or "shadow" in d)
+        return "vssadmin" in d and "delete" in d and "shadow" in d
 
     def _is_bcdedit(d: str) -> bool:
-        return "bcdedit" in d and ("recoveryenabled" in d or "safeboot" in d)
+        return "bcdedit" in d and ("recoveryenabled no" in d or "safeboot" in d)
 
     def _is_wbadmin(d: str) -> bool:
         return "wbadmin" in d and "delete" in d
@@ -506,7 +519,7 @@ def _check_ransomware_triad(events: list[ForensicEvent]) -> list[dict]:
             if not any(chk(anchor.description.lower()) for chk in _TRIAD.values()):
                 continue
             win_end = anchor.timestamp + window
-            window_evs = [e for e in host_evs if anchor.timestamp <= e.timestamp <= win_end]
+            window_evs = [e for e in host_evs if anchor.timestamp <= e.timestamp < win_end]
             found: set[str] = set()
             actors: set[str] = set()
             for wev in window_evs:
@@ -912,15 +925,15 @@ def _check_golden_silver_ticket(events: list[ForensicEvent]) -> list[dict]:
             lifetime_min = 0.0
 
         # ── Golden Ticket ────────────────────────────────────────────────────
-        golden_by_options  = (any(opt in opts for opt in _GOLDEN_TICKET_OPTIONS)
-                               and "krbtgt" not in svc)
+        # Lifetime-only detection: options-based check removed because 0x40810000
+        # (forwardable|renewable|canonicalize) is a standard Kerberoasting TGS option
+        # and produced high FP rates against kerberoasting scenarios.
         golden_by_lifetime = (lifetime_min > GOLDEN_TICKET_LIFETIME_MIN
                                and "krbtgt" not in svc)
 
-        if (golden_by_options or golden_by_lifetime) and e.user not in seen_golden:
+        if golden_by_lifetime and e.user not in seen_golden:
             seen_golden.add(e.user)
-            trigger = (f"options={opts or 'unknown'}" if golden_by_options
-                       else f"lifetime={lifetime_min:.0f} min")
+            trigger = f"lifetime={lifetime_min:.0f} min"
             svc_display = svc or "unknown"
             anomalies.append({
                 "anomaly_type": "golden_ticket",
@@ -1052,6 +1065,159 @@ def _check_high_confidence_singles(events: list[ForensicEvent]) -> list[dict]:
     return anomalies
 
 
+# ── Check 16: SMB lateral movement (T1021.002) ────────────────────────────────
+
+def _check_smb_lateral(events: list[ForensicEvent]) -> list[dict]:
+    """
+    EID 4624 LogonType 3 (network) from one user to ≥SMB_LATERAL_HOST_THRESHOLD
+    distinct destination hosts within SMB_LATERAL_WINDOW_MIN minutes.
+    Detects SMB/admin-share lateral movement without requiring EID 5140.
+    """
+    net_logons = sorted(
+        [e for e in events
+         if e.event_id == "4624"
+         and e.user and not (e.user or "").endswith("$")
+         and _get_logon_type(e.description or "") == "3"],
+        key=lambda e: e.timestamp,
+    )
+    if not net_logons:
+        return []
+
+    by_user: dict[str, list[ForensicEvent]] = defaultdict(list)
+    for e in net_logons:
+        by_user[e.user].append(e)
+
+    window = timedelta(minutes=SMB_LATERAL_WINDOW_MIN)
+    anomalies: list[dict] = []
+    for user, evs in by_user.items():
+        i = 0
+        while i < len(evs):
+            window_evs = [e for e in evs[i:] if e.timestamp - evs[i].timestamp <= window]
+            hosts = {e.source_host for e in window_evs}
+            if len(hosts) >= SMB_LATERAL_HOST_THRESHOLD:
+                anomalies.append({
+                    "anomaly_type": "smb_lateral_movement",
+                    "entity":       user,
+                    "description": (
+                        f"Entity {user!r} performed network logons (EID 4624 Type 3) "
+                        f"to {len(hosts)} distinct host(s) within {SMB_LATERAL_WINDOW_MIN} min: "
+                        f"{', '.join(sorted(hosts))} — SMB lateral movement (T1021.002)"
+                    ),
+                    "z_score":   None,
+                    "threshold": float(SMB_LATERAL_HOST_THRESHOLD),
+                    "observed":  float(len(hosts)),
+                    "severity":  "high",
+                })
+                break
+            i += len(window_evs) if len(window_evs) > 1 else 1
+    return anomalies
+
+
+# ── Check 17: Pass-the-Ticket (T1550.003) ─────────────────────────────────────
+
+def _check_pass_the_ticket(events: list[ForensicEvent]) -> list[dict]:
+    """
+    EID 4769 with RC4 encryption (etype 0x17) targeting lateral-movement services
+    (cifs, host, rpcss, http) but with NO EID 4768 TGT request from that user
+    within PTT_LOOKBACK_MIN minutes before the ticket request — the attacker is
+    replaying a stolen ticket rather than authenticating legitimately.
+    T1550.003.
+    """
+    _LATERAL_SERVICES = frozenset({"cifs/", "host/", "rpcss/", "http/"})
+
+    rc4_tickets = sorted(
+        [e for e in events
+         if e.event_id == "4769"
+         and e.user and not (e.user or "").endswith("$")
+         and "0x17" in (e.description or "").lower()
+         and any(svc in (e.description or "").lower() for svc in _LATERAL_SERVICES)],
+        key=lambda e: e.timestamp,
+    )
+    if not rc4_tickets:
+        return []
+
+    tgt_times: dict[str, list] = defaultdict(list)
+    for e in events:
+        if e.event_id == "4768" and e.user:
+            tgt_times[e.user].append(e.timestamp)
+
+    window = timedelta(minutes=PTT_LOOKBACK_MIN)
+    seen: set[str] = set()
+    anomalies: list[dict] = []
+    for e in rc4_tickets:
+        if e.user in seen:
+            continue
+        prior_tgts = [t for t in tgt_times.get(e.user, [])
+                      if timedelta(0) <= e.timestamp - t <= window]
+        if prior_tgts:
+            continue
+        seen.add(e.user)
+        svc = next((s for s in _LATERAL_SERVICES
+                    if s in (e.description or "").lower()), "unknown")
+        anomalies.append({
+            "anomaly_type": "pass_the_ticket",
+            "entity":       e.user,
+            "description": (
+                f"Entity {e.user!r} requested RC4-encrypted Kerberos service ticket "
+                f"(EID 4769, etype 0x17) for {svc!r} with no prior TGT (EID 4768) "
+                f"within {PTT_LOOKBACK_MIN} min — possible Pass-the-Ticket (T1550.003)"
+            ),
+            "z_score":   None,
+            "threshold": 0.0,
+            "observed":  1.0,
+            "severity":  "high",
+        })
+    return anomalies
+
+
+# ── Check 18: RDP lateral movement (T1021.001) ────────────────────────────────
+
+def _check_rdp_lateral(events: list[ForensicEvent]) -> list[dict]:
+    """
+    EID 4624 LogonType 10 (RemoteInteractive / RDP) from one user to
+    ≥RDP_LATERAL_HOST_THRESHOLD distinct destination hosts within
+    RDP_LATERAL_WINDOW_MIN minutes.  T1021.001.
+    """
+    rdp_logons = sorted(
+        [e for e in events
+         if e.event_id == "4624"
+         and e.user and not (e.user or "").endswith("$")
+         and _get_logon_type(e.description or "") == "10"],
+        key=lambda e: e.timestamp,
+    )
+    if not rdp_logons:
+        return []
+
+    by_user: dict[str, list[ForensicEvent]] = defaultdict(list)
+    for e in rdp_logons:
+        by_user[e.user].append(e)
+
+    window = timedelta(minutes=RDP_LATERAL_WINDOW_MIN)
+    anomalies: list[dict] = []
+    for user, evs in by_user.items():
+        i = 0
+        while i < len(evs):
+            window_evs = [e for e in evs[i:] if e.timestamp - evs[i].timestamp <= window]
+            hosts = {e.source_host for e in window_evs}
+            if len(hosts) >= RDP_LATERAL_HOST_THRESHOLD:
+                anomalies.append({
+                    "anomaly_type": "rdp_lateral_movement",
+                    "entity":       user,
+                    "description": (
+                        f"Entity {user!r} performed RDP logons (EID 4624 Type 10) "
+                        f"to {len(hosts)} distinct host(s) within {RDP_LATERAL_WINDOW_MIN} min: "
+                        f"{', '.join(sorted(hosts))} — RDP lateral movement (T1021.001)"
+                    ),
+                    "z_score":   None,
+                    "threshold": float(RDP_LATERAL_HOST_THRESHOLD),
+                    "observed":  float(len(hosts)),
+                    "severity":  "high" if len(hosts) >= 4 else "medium",
+                })
+                break
+            i += len(window_evs) if len(window_evs) > 1 else 1
+    return anomalies
+
+
 # ── Main entry point ───────────────────────────────────────────────────────────
 
 def analyze_behavior(events: list[ForensicEvent]) -> dict:
@@ -1092,6 +1258,9 @@ def analyze_behavior(events: list[ForensicEvent]) -> dict:
     anomalies += _check_log_clearing(sorted_events)
     anomalies += _check_lsass_pth_correlation(sorted_events)
     anomalies += _check_golden_silver_ticket(sorted_events)
+    anomalies += _check_smb_lateral(sorted_events)
+    anomalies += _check_pass_the_ticket(sorted_events)
+    anomalies += _check_rdp_lateral(sorted_events)
     anomalies += high_conf
 
     # Sort by severity (critical first, then high, medium, low)
