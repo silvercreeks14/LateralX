@@ -27,7 +27,7 @@ function TimelineEvent({ ev }: { ev: PrivilegeEvent }) {
       {/* Timeline track */}
       <div className="flex flex-col items-center flex-shrink-0">
         <div className={`w-3 h-3 rounded-full mt-1 flex-shrink-0 ${SEV_DOT[ev.severity] ?? 'bg-slate-500'}`} />
-        <div className="w-px flex-1 bg-slate-200 dark:bg-slate-200 dark:bg-slate-800 mt-1" />
+        <div className="w-px flex-1 bg-slate-200 dark:bg-slate-800 mt-1" />
       </div>
       {/* Event card */}
       <div className={`flex-1 rounded-lg border px-3 py-2 mb-2 text-xs ${SEV_COLOR[ev.severity] ?? SEV_COLOR.low}`}>
@@ -162,7 +162,7 @@ export default function PrivilegeTimelinePanel({ activeCaseId, selectedUploadId:
             <button
               onClick={() => setUploadId(null)}
               className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-              style={uploadId === null ? { background: '#00F0FF', color: '#0f172a' } : { background: '#1e293b', color: '#94a3b8' }}
+              style={uploadId === null ? { background: '#00F0FF', color: '#0f172a' } : { background: 'transparent', color: '#64748b' }}
             >All</button>
             {(uploads ?? []).map(u => (
               <button

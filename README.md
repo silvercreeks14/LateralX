@@ -12,12 +12,12 @@ Designed as a structured investigation tool for cybersecurity analysts and incid
 |---|---|
 | **Multi-source ingestion** | Windows Event Logs, Sysmon JSONL, Velociraptor artifacts, Timesketch exports, generic CSV, PCAP/PCAPNG; normalisation layer reduces token count 40–60% and applies consistent entity resolution |
 | **77 AD detection rules** | Kerberoasting, DCSync, Pass-the-Hash/Ticket, Golden/Silver Ticket, LDAP enumeration, lateral movement, persistence, defense evasion, LSASS handle access (CRED-008), Kerberos RC4 downgrade burst (KERB-014), Zerologon CVE-2020-1472, token impersonation chains, and more |
-| **Unsupervised ML** | Isolation Forest trained on a synthetic baseline grounded in LANL 2015, CERT v6.2, and OTRF/Security-Datasets; flags statistical outliers without labeled attack data; sessions with fewer than 20 events fall back to deterministic heuristics to prevent false positives |
+| **Unsupervised ML** | Isolation Forest trained on a 54-user synthetic baseline grounded in LANL 2015, CERT v6.2, and OTRF/Security-Datasets across 10 behavioral profiles; flags statistical outliers without labeled attack data; sessions with fewer than 20 events fall back to deterministic heuristics to prevent false positives |
 | **Supervised attack classifier** | RandomForest model trained on 4,800–5,200 labeled samples across 10 attack categories: ransomware, kerberoasting, lateral movement, credential theft, data exfiltration, C2 communication, persistence, privilege escalation, defense evasion, reconnaissance; falls back to keyword-only classification if scikit-learn is unavailable |
 | **Attack chain correlation** | Groups detections by actor across tactics and builds multi-step attack narratives in MITRE tactic order |
 | **Attack storyline and threat actor profiling** | Deterministic LLM-free reconstruction: session-aware attack steps, lateral movement paths (from_host → to_host with method), blast radius, and 22-tier threat actor profiling — identifies Skeleton Key, RaaS operators (Ryuk/Conti/LockBit/BlackCat/REvil), ZeroLogon, Cobalt Strike, Metasploit, APT29, FIN7/Carbanak, AD CS abuse, BloodHound-driven attacks, LotL tradecraft, insider threat indicators, and more |
 | **MITRE threat group attribution** | Technique overlap matching against 12 documented threat groups (APT29, APT28, Lazarus Group, FIN7, Sandworm, Wizard Spider, Carbanak, MuddyWater, LAPSUS$, Scattered Spider, menuPass, APT41); returns top-5 matches with overlap %, coverage %, and confidence tier (low / medium / high) |
-| **Behavioral analysis** | 18 deterministic checks: statistical anomalies (hourly spikes, lateral velocity, auth-failure bursts, off-hours privilege, Kerberoasting spikes, group modification bursts, account creation chains, NTLM spikes), credential access (NTLM brute-force, Pass-the-Hash keyword, LSASS PTH correlation, Golden/Silver Ticket), lateral movement (SMB Type-3 multi-host, RDP Type-10 multi-host, Pass-the-Ticket RC4/no-TGT), execution (WMI shell spawn, event log clearing sweep), and high-confidence single-event rules (shadow copy deletion, boot recovery disabled, CertUtil/BITSAdmin downloads, MSHTA/Regsvr32 remote exec, encoded PowerShell, Mimikatz, DCSync, LSASS dump) |
+| **Behavioral analysis** | 19 deterministic checks: statistical anomalies (hourly spikes, lateral velocity, auth-failure bursts, off-hours privilege, Kerberoasting spikes, group modification bursts, account creation chains, NTLM spikes), credential access (NTLM brute-force, Pass-the-Hash keyword, LSASS PTH correlation, Golden/Silver Ticket), lateral movement (SMB Type-3 multi-host, RDP Type-10 multi-host, Pass-the-Ticket RC4/no-TGT), execution (WMI shell spawn, event log clearing sweep), ransomware triad (shadow copy + boot-recovery disable + service stop in window), and high-confidence single-event rules (shadow copy deletion, CertUtil/BITSAdmin downloads, MSHTA/Regsvr32 remote exec, encoded PowerShell, Mimikatz, DCSync, LSASS dump) |
 | **Incident severity scoring** | Rule-based 0–100 severity score from MITRE technique weights, lateral movement breadth, host blast radius, and privileged account abuse; AD full-compromise chain (DCSync + Golden Ticket + Kerberoasting) forces CRITICAL; Kerberos-only sessions discounted 30% when unaccompanied by lateral movement |
 | **Remediation playbooks** | 37 technique-specific playbooks (Golden Ticket, DCSync, LSASS dump, Kerberoasting, Pass-the-Hash, etc.) with immediate actions, short-term hardening steps, prevention measures, and reset requirements — surfaced automatically from detected MITRE techniques |
 | **Sigma and Snort rule export** | Evidence-gated generation of Sigma (YAML) and Snort rules from detected techniques and IOCs; behavioral sequence rules (brute-force→success, lateral chain, recon→lateral) are only emitted when the pattern is actually present in the data |
@@ -31,6 +31,7 @@ Designed as a structured investigation tool for cybersecurity analysts and incid
 | **Threat intelligence** | Optional VirusTotal and AbuseIPDB enrichment; gracefully no-ops when API keys are absent |
 | **Incident memory** | Persists IOC patterns (hashes, IPs, domains, registry keys) across cases; new uploads are automatically cross-referenced against all prior incident patterns to surface recurring attacker infrastructure |
 | **Global full-text search** | Real-time search across all events, analyses, cases, and notes with relevance ranking; supports fuzzy hostname/user matching and event ID filtering |
+| **LMD Random Forest scan** | Upload a labelled Sysmon CSV and run a scikit-learn RandomForest classifier (`rf_model.pkl`) trained to detect Zerologon, Log4Shell, Kerberoasting, and Pass-the-Hash; returns per-event anomaly labels, a summary statistics panel, and a Cytoscape-compatible interactive attack graph with attacker / victim / normal node classification and color-coded suspicious edges |
 | **LLM narrative** | Optional Ollama (local) integration for AI-generated investigation narratives with citation callouts — each AI claim links back to the specific event ID that supports it, visible inline in the UI |
 | **Reporting** | Self-contained HTML executive reports and court-admissible forensic reports with chain-of-custody metadata |
 | **Case management** | Full case lifecycle (active / closed / archived), analyst notes, pinned findings, case-scoped uploads |
@@ -58,6 +59,7 @@ FastAPI backend (Python 3.11+)
 ├── Intelligence      — ad_entity_intel.py  (risk profiling)
 │                       ad_privilege_timeline.py  (escalation chains)
 │                       ip_identity.py  (IP → identity table)
+│                       lmd_model.py  (LMD RandomForest scan + attack graph)
 │                       mitre.py  (ATT&CK mapping)
 │                       ioc.py  (IOC extraction + STIX export)
 │                       threat_intel.py  (VT / AbuseIPDB)
@@ -93,7 +95,7 @@ pip install -r requirements.txt
 cd frontend && npm install && cd ..
 
 # 3. Start the backend  (default admin: ForensicAdmin2024!)
-uvicorn backend.main:app --reload
+uvicorn main:app --reload
 
 # 4. Start the frontend (separate terminal)
 cd frontend && npm run dev
@@ -123,12 +125,12 @@ LateralX auto-detects the running Ollama instance. If Ollama is absent, narrativ
 
 The UI guides analysts through a structured DFIR workflow:
 
-| Phase | Name | What you do |
-|-------|------|-------------|
-| 1 | **Collect** | Upload log files (CSV / JSONL / PCAP), manage cases, review the raw event timeline |
-| 2 | **Explore** | Browse the attack graph, filter by host/user/event type, search across events and notes |
-| 3 | **Analyze** | Run the detection engine, review MITRE mappings, behavioral anomalies, IOCs, storyline |
-| 4 | **AD Intelligence** | AD scan (77 rules), privilege timeline, entity risk profiles (0–100 per user/host/group), AD threat map (technique matrix across hosts in tactic order), MITRE heatmap, MITRE threat group attribution |
+| Phase | Name | Nav items | What you do |
+|-------|------|-----------|-------------|
+| 1 | **Collect** | Data Ingestion, Cases | Upload log files (CSV / JSONL / PCAP), manage case lifecycle, review the raw event timeline |
+| 2 | **Explore** | Timeline, Attack Graph | Browse the chronological event table, navigate the interactive Cytoscape.js attack graph, filter by host / user / event type |
+| 3 | **Analyze** | AI Analysis, Attack Storyline | Run the full detection engine — MITRE mappings, behavioral anomalies, ML scores, IOCs, threat group attribution, remediation playbooks, report export; reconstruct deterministic attack storyline with lateral movement paths and blast radius |
+| 4 | **AD Intelligence** | AD Intelligence | AD scan (77 rules), LMD RF scan, privilege timeline, entity risk profiles (0–100 per user/host/group), AD threat map, MITRE heatmap, MITRE threat group attribution |
 
 ---
 
@@ -153,7 +155,7 @@ Rule categories: `Kerberos (14)`, `DCSync/Replication (10)`, `Lateral Movement (
 
 ### Unsupervised ML (Isolation Forest)
 
-Trained on a 50-profile synthetic baseline grounded in three public datasets (LANL 2015 user behaviour, CERT v6.2 insider threat, OTRF/Security-Datasets red-team exercises). Scores every entity against the learned normal distribution — entirely name-blind, no signatures required. Entities with fewer than 20 events automatically fall back to deterministic heuristics to prevent statistical false positives on short sessions.
+Trained on a 54-user / 10-profile synthetic baseline grounded in three public datasets (LANL 2015 user behaviour, CERT v6.2 insider threat, OTRF/Security-Datasets red-team exercises). Scores every entity against the learned normal distribution — entirely name-blind, no signatures required. Entities with fewer than 20 events automatically fall back to deterministic heuristics to prevent statistical false positives on short sessions.
 
 ### Attack Chain Correlation
 
@@ -352,6 +354,7 @@ All endpoints are served under `/api`. Interactive Swagger docs available at `ht
 | **Benchmark** | `GET /benchmark` (Layer A + Layer B benchmark report against OTRF datasets) |
 | **IOCs** | `GET /iocs`, `GET /iocs/export/csv`, `GET /iocs/export/stix` |
 | **AD** | `POST /analyze/privilege-timeline`, `GET /ad-entities` |
+| **LMD RF Scan** | `POST /analyze/lmd-rf` (upload Sysmon CSV, run RandomForest, return anomalies + graph data), `GET /analyze/lmd-rf/attack-graph` (download pyvis HTML attack graph) |
 | **IP Identity** | `GET /ip-identity` |
 | **Cases** | `POST /cases`, `GET /cases`, `PATCH /cases/{id}`, `DELETE /cases/{id}` |
 | **Notes** | `POST /notes`, `GET /notes`, `PATCH /notes/{id}`, `DELETE /notes/{id}` |
@@ -376,6 +379,7 @@ backend/
     ad_privilege_timeline.py  — Privilege escalation chain reconstruction
     ad_tool_signatures.py     — Toolkit behavioural fingerprinting
     attack_classifier.py      — Supervised 10-class RandomForest classifier
+    lmd_model.py              — LMD RandomForest scan (Zerologon / Log4Shell / Kerberoasting / PTH)
     behavioral.py             — 18 deterministic behavioural anomaly checks
     correlation.py            — PCAP ↔ event timestamp + IP correlation
     graph.py                  — Cytoscape.js attack graph builder
@@ -398,20 +402,24 @@ backend/
   db/
     models.py                 — SQLAlchemy ORM (11 tables, SQLite WAL)
   ingest/
-    parser.py                 — Multi-format log ingestion pipeline
+    parser.py                 — Multi-format log ingestion pipeline (CSV / JSONL / Timesketch / Plaso)
+    pcap_parser.py            — PCAP / PCAPng ingestion via pyshark; flow deduplication
 
 backend/data/
   threat_groups.json          — 12 threat group technique sets (MITRE ATT&CK Groups)
   remediation_lookup.json     — 37 technique-specific remediation playbooks
 
+rf_model.pkl                  — Trained RandomForest model for LMD scan (project root; loaded by lmd_model.py)
+
 frontend/
   src/
-    components/               — 23 React UI panels (Timeline, GraphView, BehavioralPanel,
+    components/               — 24 React UI panels (Timeline, GraphView, BehavioralPanel,
                                 StorylinePanel, MitrePanel, IOCPanel, NarrativePanel,
                                 ADDetectionPanel, ADEntityPanel, ADThreatMap,
-                                PrivilegeTimelinePanel, MLEntityBehavior,
-                                InvestigationNarrative, CaseDashboard, UploadPanel,
-                                NotesPanel, GlobalSearch, FilterBar, and more)
+                                PrivilegeTimelinePanel, LMDRFScanPanel,
+                                MLEntityBehavior, InvestigationNarrative,
+                                CaseDashboard, UploadPanel, NotesPanel,
+                                GlobalSearch, FilterBar, and more)
     api/client.ts             — Typed API client
     types/index.ts            — Shared TypeScript types
     App.tsx                   — Root layout, navigation, dark mode
@@ -487,7 +495,7 @@ Evaluated against 7 full kill-chain scenarios spanning hours to days. Ground tru
 
 ### Benchmark 4 — Benign False-Positive Rate (60K synthetic baseline)
 
-Evaluated `analyze_behavior` against 60,313 purely benign events (64 users, 77 hosts, 30 days) generated by `ml_synthetic.py` to measure real-world FP rates on clean enterprise data.
+Evaluated `analyze_behavior` against a benign synthetic corpus (54 users, 10 profiles, 30 days) generated by `ml_synthetic.py` to measure real-world FP rates on clean enterprise data.
 
 | Rule category | Count on benign | Assessment |
 |---|---|---|
@@ -499,16 +507,20 @@ Evaluated `analyze_behavior` against 60,313 purely benign events (64 users, 77 h
 
 ### ML Baseline Coverage (Gap 2)
 
-Isolation Forest trained on a 60,313-event synthetic corpus with **64 unique users** across 6 behavioral profiles:
+Isolation Forest trained on a synthetic corpus with **54 unique users** across 10 behavioral profiles (generated by `ml_synthetic.py`):
 
 | Profile | Count | Behavior |
 |---|---|---|
-| Standard employee | 25 | Business-hours interactive, typical workload |
-| Privileged admin | 10 | Elevated privileges, AD management tasks |
-| Service account | 10 | 24/7 automated, constrained process set |
-| Contractor | 3 | VPN Type-3, Mon-Fri 09-17, no admin tools |
-| DevOps / CI | 3 | 24/7 build jobs, EID 4698 nightly tasks |
-| Remote worker | 3 | Variable 07-21, VPN reconnects, elevated failure rate |
+| Standard worker | 10 | 09–17h, single host, Office/browser, no admin tools |
+| IT admin | 6 | Variable hours, 8–20 hosts, legitimate admin tools, normal Kerberos |
+| Service account | 6 | 22–04h, single host, scheduled/repetitive, no admin tools |
+| Developer | 5 | 10–19h, 1–3 hosts, high process rate, build tooling |
+| Help desk | 5 | 08–17h, 5–10 rotating hosts, remote-access tools |
+| Security analyst | 7 | Legitimate security tooling, log queries, policy checks |
+| DB admin | 4 | 00–06h maintenance windows, DB servers, backup tools |
+| Domain controller | 4 | 24/7 Kerberos auth + replication (DC service accounts) |
+| Executive | 3 | 09–16h, single host, low volume, no technical processes |
+| Cloud workstation | 4 | Azure AD hybrid-joined; elevated EID 4648 + background PS noise |
 
 ### Mutation Test Coverage (Gap 4 — confirmation bias)
 

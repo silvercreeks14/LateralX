@@ -1,7 +1,7 @@
 """
 LateralX AD Detection Engine — rule-based Active Directory attack detection.
 
-71 rules across 7 categories, evaluated against ForensicEvent lists.
+77 rules across 9 categories, evaluated against ForensicEvent lists.
 Rules are plain Python dataclasses — add new rules by appending to AD_RULES.
 Each rule is fully transparent: no black-box scoring, no ML weights.
 """

@@ -285,7 +285,7 @@ export default function ADDetectionPanel({ activeCaseId, uploads, onResult }: Pr
           <div>
             <h2 className="text-slate-900 dark:text-white font-semibold text-lg">AD Detection Engine</h2>
             <p className="text-slate-500 text-sm mt-0.5">
-              71 rule-based Active Directory attack detections across 7 categories.
+              77 rule-based Active Directory attack detections across 9 categories.
               No ML model — fully transparent rule evaluation.
             </p>
           </div>
@@ -413,7 +413,7 @@ export default function ADDetectionPanel({ activeCaseId, uploads, onResult }: Pr
           {detections.length === 0 ? (
             <div className="bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800/30 rounded-xl p-8 text-center">
               <p className="text-green-700 dark:text-green-400 font-semibold mb-1">No AD attacks detected</p>
-              <p className="text-slate-500 text-sm">{result.total_events_analyzed.toLocaleString()} events analyzed — all 71 rules returned clean.</p>
+              <p className="text-slate-500 text-sm">{result.total_events_analyzed.toLocaleString()} events analyzed — all 77 rules returned clean.</p>
             </div>
           ) : (
             <div className="space-y-2">
