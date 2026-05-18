@@ -1,0 +1,34 @@
+[
+  {
+    "timestamp": "2024-01-15T02:00:00",
+    "source_host": "DC-01",
+    "user": "ANONYMOUS LOGON",
+    "event_id": "4624",
+    "description": "An account was successfully logged on. LogonType: 3 Account Name: ANONYMOUS LOGON",
+    "extra": {}
+  },
+  {
+    "timestamp": "2024-01-15T02:00:30",
+    "source_host": "DC-01",
+    "user": "attacker",
+    "event_id": "4742",
+    "description": "A computer account was changed.",
+    "extra": {}
+  },
+  {
+    "timestamp": "2024-01-15T02:00:45",
+    "source_host": "DC-01",
+    "user": "attacker",
+    "event_id": "4742",
+    "description": "A computer account was changed.",
+    "extra": {}
+  },
+  {
+    "timestamp": "2024-01-15T02:01:00",
+    "source_host": "DC-01",
+    "user": "attacker",
+    "event_id": "4742",
+    "description": "A computer account was changed.",
+    "extra": {}
+  }
+]

@@ -1,0 +1,1 @@
+{"datetime":"2024-09-03T10:25:00Z","event_id":"4624","hostname":"FILE-SERVER-01","username":"dbouchard","message":"Account logged on. Account Name: dbouchard. Logon Type: 9. Workstation Name: DC-01. Source Network Address: 10.0.1.1. Authentication Package: NTLM.","LogonType":"9"}

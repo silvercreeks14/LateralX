@@ -1,0 +1,3 @@
+{"datetime":"2024-03-15T23:05:00Z","event_id":"1102","hostname":"DC-01","username":"jturner","message":"The audit log was cleared. Subject: Account Name: jturner. Logon ID: 0x3E7. Timestamp: 2024-03-15T23:05:00Z."}
+{"datetime":"2024-03-15T23:08:00Z","event_id":"1102","hostname":"WORKSTATION-08","username":"jturner","message":"The audit log was cleared. Subject: Account Name: jturner. Logon ID: 0x3E7. Timestamp: 2024-03-15T23:08:00Z."}
+{"datetime":"2024-03-15T23:10:00Z","event_id":"4688","hostname":"DC-01","username":"jturner","message":"New process created. Account Name: jturner. New Process Name: C:\\Windows\\System32\\wevtutil.exe. CommandLine: wevtutil cl Security. Parent Process Name: C:\\Windows\\System32\\cmd.exe."}

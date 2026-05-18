@@ -1,0 +1,11 @@
+{
+  "timestamp": "2024-01-15T03:22:11",
+  "source_host": "WORKSTATION-04",
+  "user": "jsmith",
+  "event_id": "13",
+  "description": "Registry value set. TargetObject: HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest\\UseLogonCredential. Details: DWORD (0x00000001)",
+  "extra": {
+    "TargetObject": "HKLM\\SYSTEM\\CurrentControlSet\\Control\\SecurityProviders\\WDigest\\UseLogonCredential",
+    "Details": "DWORD (0x00000001)"
+  }
+}
