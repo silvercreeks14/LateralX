@@ -38,13 +38,11 @@ function EntityCard({ entity }: { entity: ADEntity }) {
         onClick={() => setOpen(v => !v)}
       >
         {/* Entity type icon */}
-        <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold"
-          style={{
-            background: entity.entity_type === 'user'  ? '#0f3460' :
-                        entity.entity_type === 'host'  ? '#1e3a8a' : '#1e293b',
-            color: entity.entity_type === 'user'  ? '#60a5fa' :
-                   entity.entity_type === 'host'  ? '#93c5fd' : '#94a3b8',
-          }}>
+        <div className={`flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-sm font-bold ${
+          entity.entity_type === 'user' ? 'bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300' :
+          entity.entity_type === 'host' ? 'bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300' :
+                                          'bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+        }`}>
           {entity.entity_type === 'user' ? 'U' : entity.entity_type === 'host' ? 'H' : 'G'}
         </div>
 
@@ -187,8 +185,8 @@ export default function ADEntityPanel({ activeCaseId, uploads }: Props) {
           <button
             onClick={run}
             disabled={loading}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors flex-shrink-0"
-            style={{ background: loading ? '#334155' : '#00F0FF', color: loading ? '#94a3b8' : '#0f172a' }}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors flex-shrink-0 ${loading ? 'bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-400' : 'text-slate-900'}`}
+            style={loading ? undefined : { background: '#00F0FF' }}
           >
             {loading ? (
               <>
@@ -207,15 +205,15 @@ export default function ADEntityPanel({ activeCaseId, uploads }: Props) {
             <span className="text-xs text-slate-500">Source:</span>
             <button
               onClick={() => setUploadId(null)}
-              className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors"
-              style={uploadId === null ? { background: '#00F0FF', color: '#0f172a' } : { background: '#1e293b', color: '#94a3b8' }}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${uploadId === null ? 'text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+              style={uploadId === null ? { background: '#00F0FF' } : undefined}
             >All</button>
             {(uploads ?? []).map(u => (
               <button
                 key={u.id}
                 onClick={() => setUploadId(u.id)}
-                className="px-2.5 py-1 rounded-full text-xs font-medium transition-colors truncate max-w-[180px]"
-                style={uploadId === u.id ? { background: '#00F0FF', color: '#0f172a' } : { background: '#1e293b', color: '#94a3b8' }}
+                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors truncate max-w-[180px] ${uploadId === u.id ? 'text-slate-900' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}
+                style={uploadId === u.id ? { background: '#00F0FF' } : undefined}
                 title={u.filename}
               >{u.filename.length > 22 ? u.filename.slice(0, 19) + '…' : u.filename}</button>
             ))}

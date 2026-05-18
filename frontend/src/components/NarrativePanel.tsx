@@ -1,4 +1,4 @@
-﻿import { useState, useCallback, useEffect, useRef } from 'react'
+﻿import { useState, useCallback, useEffect, useRef, useMemo } from 'react'
 import { api } from '../api/client'
 import type { RCAResult, MLModelStatus, ThreatIntelStatus, Upload, AttackClassification } from '../types'
 import MitrePanel from './MitrePanel'
@@ -22,16 +22,16 @@ interface Props {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const SEVERITY_STYLES: Record<string, { bar: string; text: string; ring: string; bg: string }> = {
-  CRITICAL: { bar: 'bg-red-600',    text: 'text-red-400',    ring: 'border-red-700/60',    bg: 'bg-red-950/20'    },
-  HIGH:     { bar: 'bg-orange-500', text: 'text-orange-400', ring: 'border-orange-700/60', bg: 'bg-orange-950/20' },
-  MEDIUM:   { bar: 'bg-amber-400',  text: 'text-amber-400',  ring: 'border-amber-700/60',  bg: 'bg-amber-950/20'  },
-  LOW:      { bar: 'bg-green-400',  text: 'text-green-400',  ring: 'border-green-700/60',  bg: 'bg-green-950/20'  },
+  CRITICAL: { bar: 'bg-red-600',    text: 'text-red-600 dark:text-red-400',       ring: 'border-red-300 dark:border-red-700/60',       bg: 'bg-red-50 dark:bg-red-950/20'       },
+  HIGH:     { bar: 'bg-orange-500', text: 'text-orange-600 dark:text-orange-400', ring: 'border-orange-300 dark:border-orange-700/60', bg: 'bg-orange-50 dark:bg-orange-950/20' },
+  MEDIUM:   { bar: 'bg-amber-400',  text: 'text-amber-600 dark:text-amber-400',   ring: 'border-amber-300 dark:border-amber-700/60',   bg: 'bg-amber-50 dark:bg-amber-950/20'   },
+  LOW:      { bar: 'bg-green-500',  text: 'text-green-600 dark:text-green-400',   ring: 'border-green-300 dark:border-green-700/60',   bg: 'bg-green-50 dark:bg-green-950/20'   },
 }
 
 const CONFIDENCE_STYLES: Record<string, string> = {
-  high:   'bg-green-900/30 text-green-400 border-green-700/40',
-  medium: 'bg-amber-900/30 text-amber-400 border-amber-700/40',
-  low:    'bg-red-900/30 text-red-400 border-red-700/40',
+  high:   'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400 border-green-200 dark:border-green-700/40',
+  medium: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-700/40',
+  low:    'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400 border-red-200 dark:border-red-700/40',
 }
 
 function severityLabel(score: number): string {
@@ -65,26 +65,26 @@ function LoadingScreen() {
                     'Still working — large dataset or slow hardware detected…'
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-800 p-14 flex flex-col items-center gap-5 text-center">
+    <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-14 flex flex-col items-center gap-5 text-center">
       <div className="relative">
-        <svg className="animate-spin h-12 w-12" fill="none" viewBox="0 0 24 24" style={{ color: '#00F0FF' }}>
+        <svg className="animate-spin h-12 w-12" fill="none" viewBox="0 0 24 24" style={{ color: 'var(--brand)' }}>
           <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
           <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
         <div
           className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold"
-          style={{ color: '#00F0FF' }}
+          style={{ color: 'var(--brand)' }}
         >
           {fmtElapsed(elapsed)}
         </div>
       </div>
 
       <div className="space-y-1.5">
-        <p className="text-sm font-semibold text-slate-200">AI Analysis running</p>
-        <p className="text-xs text-slate-400 max-w-xs">{phase}</p>
+        <p className="text-sm font-semibold text-slate-800 dark:text-slate-200">AI Analysis running</p>
+        <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs">{phase}</p>
       </div>
 
-      <div className="w-full max-w-xs bg-slate-800 rounded-full h-1 overflow-hidden">
+      <div className="w-full max-w-xs bg-slate-200 dark:bg-slate-800 rounded-full h-1 overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-1000"
           style={{
@@ -101,7 +101,7 @@ function LoadingScreen() {
 
       {elapsed > 30 && (
         <div className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-lg px-3 py-2 max-w-xs">
-          Tip: <span className="text-slate-300">Quick Scan</span> takes &lt;5 seconds and
+          Tip: <span className="text-slate-700 dark:text-slate-300">Quick Scan</span> takes &lt;5 seconds and
           provides MITRE, IOCs, and ML scores without waiting for Ollama.
         </div>
       )}
@@ -109,19 +109,33 @@ function LoadingScreen() {
   )
 }
 
+// ── Dark-mode detector ────────────────────────────────────────────────────────
+
+function useDark() {
+  const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
+  useEffect(() => {
+    const obs = new MutationObserver(() =>
+      setDark(document.documentElement.classList.contains('dark'))
+    )
+    obs.observe(document.documentElement, { attributeFilter: ['class'] })
+    return () => obs.disconnect()
+  }, [])
+  return dark
+}
+
 // ── Attack Classification ─────────────────────────────────────────────────────
 
-const ATK_META: Record<string, { label: string; color: string; bg: string; border: string }> = {
-  ransomware:           { label: 'Ransomware',           color: '#ef4444', bg: 'bg-red-950/20',     border: 'border-red-800/40'     },
-  kerberoasting:        { label: 'Kerberoasting',        color: '#a78bfa', bg: 'bg-violet-950/20',  border: 'border-violet-800/40'  },
-  lateral_movement:     { label: 'Lateral Movement',     color: '#fbbf24', bg: 'bg-amber-950/20',   border: 'border-amber-800/40'   },
-  credential_theft:     { label: 'Credential Theft',     color: '#fb7185', bg: 'bg-rose-950/20',    border: 'border-rose-800/40'    },
-  data_exfiltration:    { label: 'Data Exfiltration',    color: '#38bdf8', bg: 'bg-sky-950/20',     border: 'border-sky-800/40'     },
-  c2_communication:     { label: 'C2 Communication',     color: '#34d399', bg: 'bg-emerald-950/20', border: 'border-emerald-800/40' },
-  persistence:          { label: 'Persistence',          color: '#fb923c', bg: 'bg-orange-950/20',  border: 'border-orange-800/40'  },
-  privilege_escalation: { label: 'Privilege Escalation', color: '#f472b6', bg: 'bg-pink-950/20',    border: 'border-pink-800/40'    },
-  defense_evasion:      { label: 'Defense Evasion',      color: '#60a5fa', bg: 'bg-blue-950/20',    border: 'border-blue-800/40'    },
-  reconnaissance:       { label: 'Reconnaissance',       color: '#a3e635', bg: 'bg-lime-950/20',    border: 'border-lime-800/40'    },
+const ATK_META: Record<string, { label: string; light: string; dark: string; bg: string; border: string }> = {
+  ransomware:           { label: 'Ransomware',           light: '#dc2626', dark: '#ef4444', bg: 'bg-red-50 dark:bg-red-950/20',         border: 'border-red-200 dark:border-red-800/40'         },
+  kerberoasting:        { label: 'Kerberoasting',        light: '#7c3aed', dark: '#a78bfa', bg: 'bg-violet-50 dark:bg-violet-950/20',   border: 'border-violet-200 dark:border-violet-800/40'   },
+  lateral_movement:     { label: 'Lateral Movement',     light: '#d97706', dark: '#fbbf24', bg: 'bg-amber-50 dark:bg-amber-950/20',     border: 'border-amber-200 dark:border-amber-800/40'     },
+  credential_theft:     { label: 'Credential Theft',     light: '#e11d48', dark: '#fb7185', bg: 'bg-rose-50 dark:bg-rose-950/20',       border: 'border-rose-200 dark:border-rose-800/40'       },
+  data_exfiltration:    { label: 'Data Exfiltration',    light: '#0284c7', dark: '#38bdf8', bg: 'bg-sky-50 dark:bg-sky-950/20',         border: 'border-sky-200 dark:border-sky-800/40'         },
+  c2_communication:     { label: 'C2 Communication',     light: '#059669', dark: '#34d399', bg: 'bg-emerald-50 dark:bg-emerald-950/20', border: 'border-emerald-200 dark:border-emerald-800/40' },
+  persistence:          { label: 'Persistence',          light: '#ea580c', dark: '#fb923c', bg: 'bg-orange-50 dark:bg-orange-950/20',   border: 'border-orange-200 dark:border-orange-800/40'   },
+  privilege_escalation: { label: 'Privilege Escalation', light: '#db2777', dark: '#f472b6', bg: 'bg-pink-50 dark:bg-pink-950/20',       border: 'border-pink-200 dark:border-pink-800/40'       },
+  defense_evasion:      { label: 'Defense Evasion',      light: '#2563eb', dark: '#60a5fa', bg: 'bg-blue-50 dark:bg-blue-950/20',       border: 'border-blue-200 dark:border-blue-800/40'       },
+  reconnaissance:       { label: 'Reconnaissance',       light: '#65a30d', dark: '#a3e635', bg: 'bg-lime-50 dark:bg-lime-950/20',       border: 'border-lime-200 dark:border-lime-800/40'       },
 }
 
 const CONF_BAR: Record<string, string> = {
@@ -129,9 +143,12 @@ const CONF_BAR: Record<string, string> = {
 }
 
 function AttackClassificationPanel({ clf }: { clf: AttackClassification }) {
+  const isDark   = useDark()
   const [expanded, setExpanded] = useState(false)
-  const meta = ATK_META[clf.primary_attack] ?? { label: clf.primary_attack, color: '#94a3b8', bg: 'bg-slate-800', border: 'border-slate-700' }
-  const pct  = Math.round(clf.confidence * 100)
+  const fallback = useMemo(() => ({ label: clf.primary_attack, light: '#475569', dark: '#94a3b8', bg: 'bg-slate-50 dark:bg-slate-800', border: 'border-slate-200 dark:border-slate-700' }), [clf.primary_attack])
+  const meta  = ATK_META[clf.primary_attack] ?? fallback
+  const color = isDark ? meta.dark : meta.light
+  const pct   = Math.round(clf.confidence * 100)
 
   return (
     <div className={`rounded-lg border ${meta.border} ${meta.bg} p-4`}>
@@ -140,13 +157,13 @@ function AttackClassificationPanel({ clf }: { clf: AttackClassification }) {
           <div className="flex items-center gap-2 mb-1">
             <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Attack Classification</span>
             <span className="text-xs px-1.5 py-0.5 rounded font-medium border"
-              style={{ color: meta.color, borderColor: meta.color + '44', background: meta.color + '11' }}>
+              style={{ color, borderColor: color + '66', background: color + '18' }}>
               {clf.confidence_label.toUpperCase()}
             </span>
           </div>
-          <p className="text-lg font-bold" style={{ color: meta.color }}>{meta.label}</p>
+          <p className="text-lg font-bold" style={{ color }}>{meta.label}</p>
           <div className="mt-2 flex items-center gap-2">
-            <div className="flex-1 bg-slate-700 rounded-full h-2 overflow-hidden">
+            <div className="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-2 overflow-hidden">
               <div className={`h-2 rounded-full ${CONF_BAR[clf.confidence_label]}`} style={{ width: `${pct}%` }} />
             </div>
             <span className="text-xs font-mono text-slate-500 w-8 text-right">{pct}%</span>
@@ -154,7 +171,7 @@ function AttackClassificationPanel({ clf }: { clf: AttackClassification }) {
           {clf.mitre_techniques.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-1">
               {clf.mitre_techniques.map(id => (
-                <span key={id} className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-mono">{id}</span>
+                <span key={id} className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 font-mono">{id}</span>
               ))}
             </div>
           )}
@@ -164,27 +181,28 @@ function AttackClassificationPanel({ clf }: { clf: AttackClassification }) {
               <div className="flex flex-wrap gap-1">
                 {clf.top_evidence.map((kw, i) => (
                   <span key={i} className="text-xs px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-900 border font-mono"
-                    style={{ borderColor: meta.color + '55', color: meta.color }}>{kw}</span>
+                    style={{ borderColor: color + '66', color }}>{kw}</span>
                 ))}
               </div>
             </div>
           )}
         </div>
-        <button onClick={() => setExpanded(e => !e)} className="text-xs text-slate-500 hover:text-slate-300 flex-shrink-0 mt-1">
+        <button onClick={() => setExpanded(e => !e)} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 flex-shrink-0 mt-1">
           {expanded ? '▲ less' : '▼ all'}
         </button>
       </div>
       {expanded && (
-        <div className="mt-3 pt-3 border-t border-slate-700 space-y-1.5">
+        <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700 space-y-1.5">
           <p className="text-xs font-medium text-slate-500 mb-2">All scores</p>
           {Object.entries(clf.all_scores).map(([cat, score]) => {
-            const m = ATK_META[cat] ?? { label: cat, color: '#94a3b8' }
+            const m = ATK_META[cat]
+            const c = m ? (isDark ? m.dark : m.light) : (isDark ? '#94a3b8' : '#475569')
             const w = Math.round(score * 100)
             return (
               <div key={cat} className="flex items-center gap-2">
-                <span className="text-xs w-40 truncate" style={{ color: m.color }}>{m.label}</span>
-                <div className="flex-1 bg-slate-700 rounded-full h-1.5 overflow-hidden">
-                  <div className="h-1.5 rounded-full opacity-70" style={{ width: `${w}%`, background: m.color }} />
+                <span className="text-xs w-40 truncate" style={{ color: c }}>{m?.label ?? cat}</span>
+                <div className="flex-1 bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                  <div className="h-1.5 rounded-full opacity-80" style={{ width: `${w}%`, background: c }} />
                 </div>
                 <span className="text-xs font-mono text-slate-500 w-8 text-right">{w}%</span>
               </div>
@@ -215,7 +233,7 @@ function TabBar({
   onChange: (id: TabId) => void
 }) {
   return (
-    <div className="flex border-b border-slate-800 bg-white dark:bg-slate-900 rounded-t-xl overflow-hidden">
+    <div className="flex border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-t-xl overflow-hidden">
       {tabs.map(t => {
         const isActive = t.id === active
         return (
@@ -284,13 +302,13 @@ export default function NarrativePanel({
   // ── Empty state ─────────────────────────────────────────────────────────────
   if (!result) {
     return (
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-800 p-10 flex flex-col items-center gap-6">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-10 flex flex-col items-center gap-6">
         <div className="text-center">
-          <svg className="mx-auto h-12 w-12 text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className="mx-auto h-12 w-12 text-slate-300 dark:text-slate-700 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
               d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
           </svg>
-          <p className="text-slate-400 text-sm mb-1">No analysis run yet.</p>
+          <p className="text-slate-700 dark:text-slate-400 text-sm mb-1">No analysis run yet.</p>
           <p className="text-slate-500 text-xs">Upload evidence then click Run Analysis to start.</p>
         </div>
         <AnalysisControls
@@ -302,8 +320,8 @@ export default function NarrativePanel({
         <p className="text-xs text-slate-500">
           Analysis runs all detections — MITRE, IOCs, ML, correlation — and
           adds an AI narrative if Ollama is configured in{' '}
-          <code className="bg-slate-800 px-1 rounded">.env</code>.
-          ML training is in <span className="text-slate-300">Model Settings</span>.
+          <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded">.env</code>.
+          ML training is in <span className="text-slate-700 dark:text-slate-300">Model Settings</span>.
         </p>
       </div>
     )
@@ -341,7 +359,7 @@ export default function NarrativePanel({
       label: 'Investigation',
       accent: '#3b82f6',
       badge: withLLM
-        ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400 border border-blue-700/30">+AI</span>
+        ? <span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border border-blue-200 dark:border-blue-700/30">+AI</span>
         : undefined,
     },
     {
@@ -357,7 +375,7 @@ export default function NarrativePanel({
       label: 'Behavioral',
       accent: '#00F0FF',
       badge: (highRiskCount + suspCount) > 0
-        ? <span className="text-xs px-1.5 py-0.5 rounded bg-red-900/30 text-red-400 border border-red-700/30 font-bold">
+        ? <span className="text-xs px-1.5 py-0.5 rounded bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-700/30 font-bold">
             {highRiskCount + suspCount} flagged
           </span>
         : undefined,
@@ -368,7 +386,7 @@ export default function NarrativePanel({
     <div className="space-y-3">
 
       {/* ── Controls card (always visible above tabs) ────────────────────── */}
-      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-800 px-4 py-3 space-y-3">
+      <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 px-4 py-3 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold border ${confidenceCls}`}>
             {result.confidence.toUpperCase()} CONFIDENCE
@@ -388,24 +406,24 @@ export default function NarrativePanel({
       </div>
 
       {/* ── Tabs ─────────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-slate-800 overflow-hidden">
+      <div className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden">
         <TabBar tabs={tabs} active={activeTab} onChange={setActiveTab} />
 
-        <div className="p-4 space-y-4 min-h-[200px]">
+        <div className="p-4 space-y-4 min-h-[200px] bg-white dark:bg-slate-900">
 
           {/* Overview tab ─────────────────────────────────────────────────── */}
           {activeTab === 'overview' && (
             <>
               {/* Severity */}
-              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
+              <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-xs font-semibold text-slate-500 uppercase tracking-widest">Severity Score</span>
                   <span className={`text-sm font-bold ${sStyle.text}`}>{sLabel} — {result.severity_score}/100</span>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-2.5 overflow-hidden">
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-2.5 overflow-hidden">
                   <div className={`h-2.5 rounded-full transition-all ${sStyle.bar}`} style={{ width: `${result.severity_score}%` }} />
                 </div>
-                <div className="flex justify-between mt-1.5 text-xs text-slate-700 font-mono select-none">
+                <div className="flex justify-between mt-1.5 text-xs text-slate-500 font-mono select-none">
                   <span>LOW</span><span>MEDIUM</span><span>HIGH</span><span>CRITICAL</span>
                 </div>
               </div>
@@ -440,7 +458,7 @@ export default function NarrativePanel({
           {activeTab === 'behavioral' && (
             <>
               {verifyError && (
-                <div className="mb-3 bg-red-950/50 border border-red-800/50 text-red-300 rounded px-3 py-2 text-xs flex items-center justify-between">
+                <div className="mb-3 bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded px-3 py-2 text-xs flex items-center justify-between">
                   <span>{verifyError}</span>
                   <button onClick={() => setVerifyError(null)} className="ml-3 text-red-400 hover:text-red-200 font-bold">✕</button>
                 </div>

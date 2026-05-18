@@ -50,19 +50,19 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
     <div className="relative flex-1 max-w-xs" ref={containerRef}>
       <button
         onClick={handleOpen}
-        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500 hover:border-slate-600 hover:text-slate-300 text-xs transition-colors w-full"
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-500 hover:border-slate-500 dark:hover:border-slate-600 hover:text-slate-700 dark:hover:text-slate-300 text-xs transition-colors w-full"
         title="Global search (Ctrl+K)"
       >
         <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
         </svg>
         <span className="flex-1 text-left">Search</span>
-        <kbd className="hidden sm:inline-block px-1 py-0.5 bg-slate-800 rounded text-[10px] text-slate-600">Ctrl+K</kbd>
+        <kbd className="hidden sm:inline-block px-1 py-0.5 bg-slate-200 dark:bg-slate-800 rounded text-[10px] text-slate-500 dark:text-slate-600">Ctrl+K</kbd>
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-[480px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-800 z-50 overflow-hidden">
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-800">
+        <div className="absolute left-0 top-full mt-2 w-[480px] bg-white dark:bg-slate-900 rounded-xl shadow-2xl border border-slate-200 dark:border-slate-800 z-50 overflow-hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b border-slate-200 dark:border-slate-800">
             <svg className="w-4 h-4 text-slate-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
@@ -90,18 +90,18 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
 
             {results && results.events.length > 0 && (
               <div>
-                <div className="px-4 py-1.5 bg-slate-800 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                <div className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
                   Events ({results.events.length})
                 </div>
                 {results.events.map(ev => (
-                  <div key={ev.id} className="px-4 py-2.5 border-b border-slate-800/60 hover:bg-slate-800/50 cursor-default">
+                  <div key={ev.id} className="px-4 py-2.5 border-b border-slate-200 dark:border-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800/50 cursor-default">
                     <div className="flex items-center gap-2 mb-1 flex-wrap">
                       <span className="text-[10px] font-mono text-slate-500">{ev.timestamp.slice(0, 19)}</span>
                       <span className="text-[10px] font-medium" style={{ color: '#00F0FF' }}>{ev.source_host}</span>
                       {ev.user && <span className="text-[10px] text-slate-500">{ev.user}</span>}
                       {ev.case_id && (
                         <button
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400 hover:bg-blue-900/50"
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                           onClick={() => { onNavigateCase?.(ev.case_id!); setOpen(false) }}
                         >
                           case
@@ -110,7 +110,7 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
                     </div>
                     <p
                       className="text-xs text-slate-400"
-                      dangerouslySetInnerHTML={{ __html: ev.snippet.replace(/<mark>/g, '<mark class="bg-yellow-500/30 rounded px-0.5 text-yellow-200">') }}
+                      dangerouslySetInnerHTML={{ __html: ev.snippet.replace(/<mark>/g, '<mark class="bg-yellow-200 dark:bg-yellow-500/30 rounded px-0.5 text-yellow-900 dark:text-yellow-200">') }}
                     />
                   </div>
                 ))}
@@ -119,7 +119,7 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
 
             {results && results.notes.length > 0 && (
               <div>
-                <div className="px-4 py-1.5 bg-slate-800 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
+                <div className="px-4 py-1.5 bg-slate-100 dark:bg-slate-800 text-[10px] font-semibold text-slate-500 uppercase tracking-wide">
                   Analyst Notes ({results.notes.length})
                 </div>
                 {results.notes.map(note => (
@@ -129,7 +129,7 @@ export default function GlobalSearch({ onNavigateCase }: Props) {
                       <span className="text-[10px] text-slate-500">{note.created_at.slice(0, 10)}</span>
                       {note.case_id && (
                         <button
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/30 text-blue-400 hover:bg-blue-900/50"
+                          className="text-[10px] px-1.5 py-0.5 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/50"
                           onClick={() => { onNavigateCase?.(note.case_id!); setOpen(false) }}
                         >
                           case

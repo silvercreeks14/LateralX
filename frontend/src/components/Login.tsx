@@ -97,7 +97,7 @@ export default function Login({ onLogin }: Props) {
           {step === 'credentials' && (
             <form onSubmit={handleCredentials} className="space-y-5">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
                   Username
                 </label>
                 <input
@@ -115,7 +115,7 @@ export default function Login({ onLogin }: Props) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
                   Password
                 </label>
                 <input
@@ -133,7 +133,7 @@ export default function Login({ onLogin }: Props) {
               </div>
 
               {error && (
-                <div className="bg-red-950 border border-red-800 text-red-300 text-sm rounded-lg px-4 py-3">
+                <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm rounded-lg px-4 py-3">
                   {error}
                 </div>
               )}
@@ -157,7 +157,7 @@ export default function Login({ onLogin }: Props) {
               <button
                 type="button"
                 onClick={() => { setStep('credentials'); setError(null); setMfaCode('') }}
-                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors mb-2"
+                className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors mb-2"
               >
                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -175,15 +175,15 @@ export default function Login({ onLogin }: Props) {
                   </svg>
                 </div>
                 <div className="text-center">
-                  <p className="text-white font-semibold text-sm">Authenticator Verification</p>
-                  <p className="text-slate-400 text-xs mt-1">
-                    Enter the code for <span className="font-mono" style={{ color: '#00F0FF' }}>{pendingUsername}</span>
+                  <p className="text-slate-900 dark:text-white font-semibold text-sm">Authenticator Verification</p>
+                  <p className="text-slate-500 dark:text-slate-400 text-xs mt-1">
+                    Enter the code for <span className="font-mono" style={{ color: 'var(--brand)' }}>{pendingUsername}</span>
                   </p>
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1.5 uppercase tracking-wide">
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5 uppercase tracking-wide">
                   6-Digit Code
                 </label>
                 <input
@@ -207,7 +207,7 @@ export default function Login({ onLogin }: Props) {
               </div>
 
               {error && (
-                <div className="bg-red-950 border border-red-800 text-red-300 text-sm rounded-lg px-4 py-3">
+                <div className="bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm rounded-lg px-4 py-3">
                   {error}
                 </div>
               )}

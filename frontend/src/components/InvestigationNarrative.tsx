@@ -20,17 +20,17 @@ function CitationCallout({
   onClose: () => void
 }) {
   return (
-    <div className="mt-3 bg-slate-800 border border-blue-700/40 rounded-lg p-3">
+    <div className="mt-3 bg-slate-100 dark:bg-slate-800 border border-blue-300 dark:border-blue-700/40 rounded-lg p-3">
       <div className="flex items-center justify-between mb-2">
-        <span className="text-xs font-semibold text-blue-400">
+        <span className="text-xs font-semibold text-blue-600 dark:text-blue-400">
           Cited Evidence — Event #{eventId}
         </span>
-        <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-300">✕</button>
+        <button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-700 dark:hover:text-slate-300">✕</button>
       </div>
       {loading ? (
-        <p className="text-xs text-blue-400">Loading raw log…</p>
+        <p className="text-xs text-blue-600 dark:text-blue-400">Loading raw log…</p>
       ) : event ? (
-        <div className="space-y-1 text-xs font-mono text-slate-300">
+        <div className="space-y-1 text-xs font-mono text-slate-700 dark:text-slate-300">
           <div><span className="text-slate-500">time:</span> {new Date(event.timestamp).toISOString().replace('T', ' ').slice(0, 19)}</div>
           <div><span className="text-slate-500">host:</span> {event.source_host}</div>
           {event.user     && <div><span className="text-slate-500">user:</span>    {event.user}</div>}
@@ -78,7 +78,7 @@ function NarrativeBody({
 
   if (!citations.length) {
     return (
-      <blockquote className="text-sm text-slate-200 leading-relaxed border-l-4 border-blue-500 pl-4 italic">
+      <blockquote className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed border-l-4 border-blue-500 pl-4 italic">
         {plainNarrative}
       </blockquote>
     )
@@ -87,7 +87,7 @@ function NarrativeBody({
   return (
     <div className="space-y-2">
       {citations.map((c, i) => (
-        <p key={i} className="text-sm text-slate-200 leading-relaxed">
+        <p key={i} className="text-sm text-slate-700 dark:text-slate-200 leading-relaxed">
           <span className="italic">{c.sentence}</span>
           {c.event_ids.map(id => (
             <button
@@ -96,7 +96,7 @@ function NarrativeBody({
               className={`ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono border transition-colors ${
                 citedEventId === id
                   ? 'bg-blue-600 text-white border-blue-600'
-                  : 'bg-blue-900/30 text-blue-400 border-blue-700/40 hover:bg-blue-900/50'
+                  : 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 border-blue-300 dark:border-blue-700/40 hover:bg-blue-100 dark:hover:bg-blue-900/50'
               }`}
               title={`Show raw log for event #${id}`}
             >
@@ -126,13 +126,13 @@ export default function InvestigationNarrative({ result }: Props) {
 
       {/* ── Analyst narrative ──────────────────────────────────────────────── */}
       {result.narrative && (
-        <div className="bg-slate-800/50 rounded-lg border border-slate-800 p-5">
+        <div className="bg-slate-50 dark:bg-slate-800/50 rounded-lg border border-slate-200 dark:border-slate-800 p-5">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest">
               {result.windows_analyzed > 0 ? 'AI Investigation Narrative' : 'Investigation Summary'}
             </h3>
             {result.narrative_citations && result.narrative_citations.length > 0 && (
-              <span className="text-xs text-blue-400 font-medium">
+              <span className="text-xs text-blue-600 dark:text-blue-400 font-medium">
                 {result.narrative_citations.length} cited sentences · click [id] to reveal evidence
               </span>
             )}
@@ -147,20 +147,20 @@ export default function InvestigationNarrative({ result }: Props) {
       {/* ── Patient zero + initial access ──────────────────────────────────── */}
       {(result.patient_zero_candidate || result.initial_access_vector) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
               Patient Zero Candidate
             </h3>
-            <p className="text-sm text-slate-200">
-              {result.patient_zero_candidate || <span className="text-slate-600 italic">No candidate identified</span>}
+            <p className="text-sm text-slate-700 dark:text-slate-200">
+              {result.patient_zero_candidate || <span className="text-slate-500 italic">No candidate identified</span>}
             </p>
           </div>
-          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
             <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-2">
               Initial Access Vector
             </h3>
-            <p className="text-sm text-slate-200">
-              {result.initial_access_vector || <span className="text-slate-600 italic">Unknown</span>}
+            <p className="text-sm text-slate-700 dark:text-slate-200">
+              {result.initial_access_vector || <span className="text-slate-500 italic">Unknown</span>}
             </p>
           </div>
         </div>
@@ -168,14 +168,14 @@ export default function InvestigationNarrative({ result }: Props) {
 
       {/* ── Pivot chain ────────────────────────────────────────────────────── */}
       {result.pivot_chain.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
             Pivot Chain — Lateral Movement
           </h3>
           <ol className="space-y-2">
             {result.pivot_chain.map((step, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-blue-400 font-bold flex-shrink-0">{i + 1}.</span>
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <span className="text-blue-600 dark:text-blue-400 font-bold flex-shrink-0">{i + 1}.</span>
                 <span>{step}</span>
               </li>
             ))}
@@ -185,14 +185,14 @@ export default function InvestigationNarrative({ result }: Props) {
 
       {/* ── Anomalous events ───────────────────────────────────────────────── */}
       {result.anomalous_events.length > 0 && (
-        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4">
           <h3 className="text-xs font-semibold text-slate-500 uppercase tracking-widest mb-3">
             Anomalous Events Detected
           </h3>
           <ul className="space-y-1.5">
             {result.anomalous_events.map((ev, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 flex-shrink-0">⚠</span>
+              <li key={i} className="flex items-start gap-2 text-sm text-slate-700 dark:text-slate-300">
+                <span className="text-amber-500 dark:text-amber-400 flex-shrink-0">⚠</span>
                 <span>{ev}</span>
               </li>
             ))}

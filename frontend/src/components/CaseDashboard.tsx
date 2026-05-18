@@ -151,7 +151,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
               className={`text-xs px-3 py-1 rounded-md capitalize transition-colors ${
                 statusFilter === f
                   ? 'bg-slate-200 dark:bg-slate-700 text-slate-900 dark:text-white font-medium'
-                  : 'text-slate-500 hover:text-slate-300'
+                  : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
               }`}
             >
               {f === 'all' ? `All (${cases.length})` : `${f} (${cases.filter(c => c.status === f).length})`}
@@ -210,12 +210,12 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
 
       {/* Case list */}
       {cases.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-8 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-8 text-center">
           <p className="text-sm text-slate-500">No cases yet.</p>
           <p className="text-xs text-slate-600 mt-1">Create a case to organise evidence uploads and analyst notes.</p>
         </div>
       ) : filteredCases.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-6 text-center">
+        <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-6 text-center">
           <p className="text-sm text-slate-500">No {statusFilter} cases.</p>
         </div>
       ) : (
@@ -236,9 +236,9 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                     <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="text-sm font-semibold text-slate-900 dark:text-white truncate">{c.title}</h3>
                       <span className={`flex-shrink-0 text-xs px-2 py-0.5 rounded-full font-medium ${
-                        c.status === 'active'   ? 'bg-green-900/30 text-green-400' :
-                        c.status === 'closed'   ? 'bg-slate-800 text-slate-500' :
-                                                  'bg-amber-900/30 text-amber-400'
+                        c.status === 'active'   ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400' :
+                        c.status === 'closed'   ? 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-500' :
+                                                  'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400'
                       }`}>
                         {c.status}
                       </span>
@@ -272,7 +272,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                         <button
                           onClick={e => handleSetStatus(c.case_id, 'active', e)}
                           disabled={updatingId === c.case_id}
-                          className="text-xs px-2 py-1 rounded border border-green-800/40 text-green-400 hover:bg-green-950/20 disabled:opacity-40"
+                          className="text-xs px-2 py-1 rounded border border-green-300 dark:border-green-800/40 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 disabled:opacity-40"
                           title="Reopen case"
                         >
                           Reopen
@@ -280,7 +280,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                         <button
                           onClick={e => handleSetStatus(c.case_id, 'archived', e)}
                           disabled={updatingId === c.case_id}
-                          className="text-xs px-2 py-1 rounded border border-amber-800/40 text-amber-400 hover:bg-amber-950/20 disabled:opacity-40"
+                          className="text-xs px-2 py-1 rounded border border-amber-300 dark:border-amber-800/40 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/20 disabled:opacity-40"
                           title="Archive case"
                         >
                           Archive
@@ -291,7 +291,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
                       <button
                         onClick={e => handleSetStatus(c.case_id, 'active', e)}
                         disabled={updatingId === c.case_id}
-                        className="text-xs px-2 py-1 rounded border border-green-800/40 text-green-400 hover:bg-green-950/20 disabled:opacity-40"
+                        className="text-xs px-2 py-1 rounded border border-green-300 dark:border-green-800/40 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 disabled:opacity-40"
                         title="Restore to active"
                       >
                         Restore
@@ -319,7 +319,7 @@ export default function CaseDashboard({ onSelectCase, uploadKey }: Props) {
 
               {/* Expanded: evidence + notes */}
               {selectedId === c.case_id && (
-                <div className="border-t border-slate-800 p-4 space-y-4" onClick={e => e.stopPropagation()}>
+                <div className="border-t border-slate-200 dark:border-slate-800 p-4 space-y-4" onClick={e => e.stopPropagation()}>
 
                   {/* Evidence files */}
                   <div>

@@ -58,7 +58,7 @@ export default function FilterBar({ summary, onFilterChange }: Props) {
           <label className="text-xs text-transparent">clear</label>
           <button
             onClick={() => { setHost(''); setUser(''); setEventType(''); onFilterChange({}) }}
-            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-200 transition-colors"
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-200 transition-colors"
           >
             Clear filters
           </button>

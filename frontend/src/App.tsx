@@ -38,7 +38,7 @@ function NavItem({
       onClick={() => onClick(id)}
       className={`w-full flex items-center gap-2.5 py-1.5 px-3 rounded-lg text-xs font-medium transition-all text-left group ${
         active
-          ? 'text-[#00F0FF] bg-[#00F0FF]/[0.08]'
+          ? 'text-sky-600 dark:text-[#00F0FF] bg-sky-50 dark:bg-[#00F0FF]/[0.08]'
           : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/60'
       }`}
     >
@@ -73,7 +73,7 @@ function PhaseGroup({
           {number}
         </span>
         <span
-          className={`text-[9px] font-bold uppercase tracking-widest transition-colors ${active ? '' : 'text-slate-400 dark:text-slate-600'}`}
+          className={`text-[9px] font-bold uppercase tracking-widest transition-colors ${active ? '' : 'text-slate-500 dark:text-slate-500'}`}
           style={active ? { color } : undefined}
         >
           {label}
@@ -512,8 +512,7 @@ useEffect(() => {
           <div className="flex-shrink-0 space-y-2 px-6 pt-4">
             {knownIocMatches.length > 0 && (
               <div
-                className="rounded-xl px-4 py-3 text-sm flex items-start justify-between gap-3 border"
-                style={{ background: '#FF6B0010', borderColor: '#FF6B0030', color: '#fca5a5' }}
+                className="rounded-xl px-4 py-3 text-sm flex items-start justify-between gap-3 border bg-orange-50 dark:bg-[#FF6B0010] border-orange-200 dark:border-[#FF6B0030] text-orange-700 dark:text-[#fca5a5]"
               >
                 <span><span className="font-semibold" style={{ color: '#FF6B00' }}>IOC match:</span> {knownIocMatches.join(', ')}</span>
                 <button onClick={() => setKnownIocMatches([])} className="text-xs opacity-60 hover:opacity-100 flex-shrink-0">Dismiss</button>
@@ -597,7 +596,7 @@ useEffect(() => {
                       className={`shrink-0 text-xs px-3 py-1.5 rounded-lg border font-medium transition-colors ${
                         noiseFilter
                           ? 'text-slate-900 border-transparent'
-                          : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-500 hover:text-slate-300'
+                          : 'border-slate-300 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-500 dark:hover:border-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
                       }`}
                       style={noiseFilter ? { background: '#00F0FF', borderColor: '#00F0FF' } : {}}
                     >
@@ -718,7 +717,7 @@ useEffect(() => {
                           <button
                             onClick={handleSeedAndTrain}
                             disabled={mlSeedLoading || mlTrainLoading}
-                            className="text-xs px-3 py-1.5 rounded border border-violet-800/40 text-violet-400 hover:bg-violet-950/20 disabled:opacity-40 whitespace-nowrap"
+                            className="text-xs px-3 py-1.5 rounded border border-violet-300 dark:border-violet-800/40 text-violet-600 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-950/20 disabled:opacity-40 whitespace-nowrap"
                             title="Generate 30-user synthetic baseline then train the model"
                           >
                             {mlSeedLoading ? 'Seeding…' : 'Seed + Train'}
@@ -726,7 +725,7 @@ useEffect(() => {
                           <button
                             onClick={handleTrainMl}
                             disabled={mlTrainLoading || mlSeedLoading}
-                            className="text-xs px-3 py-1.5 rounded border border-blue-800/40 text-blue-400 hover:bg-blue-950/20 disabled:opacity-40 whitespace-nowrap"
+                            className="text-xs px-3 py-1.5 rounded border border-blue-300 dark:border-blue-800/40 text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/20 disabled:opacity-40 whitespace-nowrap"
                             title="Train on existing DB events only (requires ≥10 users)"
                           >
                             {mlTrainLoading ? 'Training…' : mlStatus.trained ? 'Retrain' : 'Train'}
@@ -760,9 +759,9 @@ useEffect(() => {
 
                     {/* ML Stats widget */}
                     {mlStats && (
-                      <div className="bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-700 p-4">
+                      <div className="bg-slate-100 dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 p-4">
                         <div className="flex items-center justify-between mb-3">
-                          <span className="text-xs font-semibold text-slate-400">Model Performance Metrics</span>
+                          <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">Model Performance Metrics</span>
                           <button onClick={() => setMlStats(null)} className="text-xs text-slate-500 hover:text-slate-300">✕</button>
                         </div>
                         <div className="grid grid-cols-4 gap-2 text-center text-xs mb-3">
@@ -772,7 +771,7 @@ useEffect(() => {
                             { label: 'F1 Score',  val: mlStats.f1_score },
                             { label: 'Accuracy',  val: mlStats.accuracy },
                           ].map(({ label, val }) => (
-                            <div key={label} className="bg-white dark:bg-slate-900 rounded border border-slate-700 p-2">
+                            <div key={label} className="bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-2">
                               <div className="text-slate-500 text-xs mb-1">{label}</div>
                               <div className="font-semibold text-slate-800 dark:text-slate-200">
                                 {val !== null && val !== undefined ? `${Math.round(val * 100)}%` : '—'}
@@ -787,7 +786,7 @@ useEffect(() => {
                             { label: 'FP', val: mlStats.false_positives, color: 'text-red-400'   },
                             { label: 'FN', val: mlStats.false_negatives, color: 'text-red-400'   },
                           ].map(({ label, val, color }) => (
-                            <div key={label} className="bg-white dark:bg-slate-900 rounded border border-slate-700 p-2">
+                            <div key={label} className="bg-white dark:bg-slate-900 rounded border border-slate-200 dark:border-slate-700 p-2">
                               <div className="text-slate-500 text-xs mb-1">{label}</div>
                               <div className={`font-semibold ${color}`}>{val}</div>
                             </div>
@@ -799,8 +798,8 @@ useEffect(() => {
 
                     {!mlStatus.trained && (
                       <p className="text-xs text-slate-600">
-                        Click <span className="text-violet-400">Seed + Train</span> to generate a synthetic baseline and train,
-                        or <span className="text-blue-400">Train</span> to train on existing DB events only (requires ≥ 10 users).
+                        Click <span className="text-violet-600 dark:text-violet-400">Seed + Train</span> to generate a synthetic baseline and train,
+                        or <span className="text-blue-600 dark:text-blue-400">Train</span> to train on existing DB events only (requires ≥ 10 users).
                         Analyst TP/FP feedback in AI Analysis feeds into model performance metrics here.
                       </p>
                     )}

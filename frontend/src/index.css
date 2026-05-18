@@ -8,6 +8,33 @@
   --accent-bg: rgba(170, 59, 255, 0.1);
   --accent-border: rgba(170, 59, 255, 0.5);
   --social-bg: rgba(244, 243, 236, 0.5);
+
+  /* Brand / active colour — readable on white (sky-600) */
+  --brand:        #0284c7;
+  --brand-bg:     rgba(2, 132, 199, 0.08);
+  --brand-border: rgba(2, 132, 199, 0.3);
+
+  /* Confidence badge colours — light mode */
+  --conf-high-c:   #0284c7;
+  --conf-high-bg:  rgba(2, 132, 199, 0.08);
+  --conf-med-c:    #b45309;
+  --conf-med-bg:   rgba(180, 83, 9, 0.08);
+  --conf-low-c:    #475569;
+  --conf-low-bg:   rgba(71, 85, 105, 0.1);
+
+  /* Attack-classification card colours — light mode (all ≥ 4.5:1 on white) */
+  --atk-c1:  #dc2626;  /* ransomware          */
+  --atk-c2:  #7c3aed;  /* kerberoasting       */
+  --atk-c3:  #d97706;  /* lateral movement    */
+  --atk-c4:  #e11d48;  /* credential theft    */
+  --atk-c5:  #0284c7;  /* data exfiltration   */
+  --atk-c6:  #059669;  /* c2 communication    */
+  --atk-c7:  #ea580c;  /* persistence         */
+  --atk-c8:  #db2777;  /* privilege escalation*/
+  --atk-c9:  #2563eb;  /* defense evasion     */
+  --atk-c10: #65a30d;  /* reconnaissance      */
+  --atk-def: #475569;  /* fallback            */
+
   --shadow:
     rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
 
@@ -40,6 +67,30 @@
   --accent-bg: rgba(192, 132, 252, 0.15);
   --accent-border: rgba(192, 132, 252, 0.5);
   --social-bg: rgba(47, 48, 58, 0.5);
+
+  --brand:        #00F0FF;
+  --brand-bg:     rgba(0, 240, 255, 0.08);
+  --brand-border: rgba(0, 240, 255, 0.3);
+
+  --conf-high-c:   #00F0FF;
+  --conf-high-bg:  rgba(0, 240, 255, 0.08);
+  --conf-med-c:    #f59e0b;
+  --conf-med-bg:   rgba(245, 158, 11, 0.08);
+  --conf-low-c:    #94a3b8;
+  --conf-low-bg:   rgba(148, 163, 184, 0.12);
+
+  --atk-c1:  #ef4444;
+  --atk-c2:  #a78bfa;
+  --atk-c3:  #fbbf24;
+  --atk-c4:  #fb7185;
+  --atk-c5:  #38bdf8;
+  --atk-c6:  #34d399;
+  --atk-c7:  #fb923c;
+  --atk-c8:  #f472b6;
+  --atk-c9:  #60a5fa;
+  --atk-c10: #a3e635;
+  --atk-def: #94a3b8;
+
   --shadow:
     rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
 }

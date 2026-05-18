@@ -7,9 +7,9 @@ import type {
 // ── Anomaly score helpers ─────────────────────────────────────────────────────
 
 const RISK_BADGE: Record<string, string> = {
-  high_risk:  'bg-red-900/30 text-red-400',
-  suspicious: 'bg-amber-900/30 text-amber-400',
-  normal:     'bg-green-900/30 text-green-400',
+  high_risk:  'bg-red-50 dark:bg-red-900/30 text-red-700 dark:text-red-400',
+  suspicious: 'bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400',
+  normal:     'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400',
 }
 
 const RISK_BAR: Record<string, string> = {
@@ -67,10 +67,10 @@ const SEV_BORDER: Record<string, string> = {
 }
 
 const SEV_BADGE: Record<string, string> = {
-  critical: 'bg-orange-500/15 text-orange-400 border border-orange-500/30',
-  high:     'bg-red-500/15 text-red-400 border border-red-500/30',
-  medium:   'bg-amber-500/15 text-amber-400 border border-amber-500/30',
-  low:      'bg-slate-700/50 text-slate-400 border border-slate-600/30',
+  critical: 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-300 dark:border-orange-500/30',
+  high:     'bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-400 border border-red-300 dark:border-red-500/30',
+  medium:   'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-500/30',
+  low:      'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-600/30',
 }
 
 function BehavioralAnomalyCard({ a }: { a: BehavioralAnomaly }) {
@@ -94,7 +94,7 @@ function BehavioralAnomalyCard({ a }: { a: BehavioralAnomaly }) {
           {a.severity}
         </span>
       </div>
-      <p className="text-slate-300 text-xs mb-2">{a.description}</p>
+      <p className="text-slate-700 dark:text-slate-300 text-xs mb-2">{a.description}</p>
       <div className="flex items-center gap-4 text-xs text-slate-500">
         <span>Observed: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.observed.toFixed(1)}</span></span>
         <span>Threshold: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.threshold.toFixed(1)}</span></span>
@@ -102,7 +102,7 @@ function BehavioralAnomalyCard({ a }: { a: BehavioralAnomaly }) {
           <span>Z: <span className="text-slate-700 dark:text-slate-300 font-mono">{a.z_score.toFixed(2)}σ</span></span>
         )}
       </div>
-      <div className="mt-2 h-1 bg-slate-700 rounded-full overflow-hidden">
+      <div className="mt-2 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full"
           style={{
@@ -156,12 +156,12 @@ export default function MLEntityBehavior({
   }
 
   return (
-    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-800 p-4 space-y-5">
+    <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 space-y-5">
 
       {/* ── Section header ─────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-widest mb-0.5">
+          <h3 className="text-xs font-semibold text-slate-600 dark:text-slate-400 uppercase tracking-widest mb-0.5">
             ML Entity Behavior Analysis
           </h3>
           {mlStatus?.trained && (
@@ -175,7 +175,7 @@ export default function MLEntityBehavior({
         <button
           onClick={runBehavioral}
           disabled={behavLoading}
-          className="text-xs px-3 py-1.5 rounded border border-cyan-800/40 text-cyan-400 hover:bg-cyan-950/20 disabled:opacity-40 whitespace-nowrap"
+          className="text-xs px-3 py-1.5 rounded border border-cyan-300 dark:border-cyan-800/40 text-cyan-700 dark:text-cyan-400 hover:bg-cyan-50 dark:hover:bg-cyan-950/20 disabled:opacity-40 whitespace-nowrap"
           title="Run 13 deterministic behavioral checks: Z-score spikes, lateral velocity, auth bursts, off-hours privilege, Kerberoasting, NTLM brute-force, Pass-the-Hash, WMI shell spawn, ransomware recovery triad, log clearing sweep"
         >
           {behavLoading ? 'Analyzing…' : 'Run Behavioral Checks'}
@@ -190,7 +190,7 @@ export default function MLEntityBehavior({
 
         {!mlStatus?.trained ? (
           <p className="text-xs text-slate-500 italic">
-            No model trained. Go to <span className="text-slate-300">Model Settings</span> to train the anomaly detector.
+            No model trained. Go to <span className="text-slate-700 dark:text-slate-300">Model Settings</span> to train the anomaly detector.
           </p>
         ) : mlScores.length > 0 ? (
           <div className="space-y-3">
@@ -198,7 +198,7 @@ export default function MLEntityBehavior({
               <div key={s.entity}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm font-mono text-slate-300 truncate">{s.entity}</span>
+                    <span className="text-sm font-mono text-slate-700 dark:text-slate-300 truncate">{s.entity}</span>
                     <span className={`text-xs px-2 py-0.5 rounded-full font-semibold flex-shrink-0 ${RISK_BADGE[s.risk_level] ?? RISK_BADGE.normal}`}>
                       {RISK_LABEL[s.risk_level] ?? s.risk_level.toUpperCase()}
                     </span>
@@ -215,7 +215,7 @@ export default function MLEntityBehavior({
                         <button
                           onClick={() => onVerify(s.entity, true)}
                           disabled={verifying === s.entity}
-                          className="text-xs px-2 py-0.5 rounded border border-green-800/40 text-green-400 hover:bg-green-950/20 disabled:opacity-40"
+                          className="text-xs px-2 py-0.5 rounded border border-green-300 dark:border-green-800/40 text-green-700 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-950/20 disabled:opacity-40"
                           title="Confirm real threat (True Positive)"
                         >
                           TP
@@ -235,7 +235,7 @@ export default function MLEntityBehavior({
                     )}
                   </div>
                 </div>
-                <div className="w-full bg-slate-700 rounded-full h-1.5 mb-1">
+                <div className="w-full bg-slate-200 dark:bg-slate-700 rounded-full h-1.5 mb-1">
                   <div
                     className={`h-1.5 rounded-full transition-all ${RISK_BAR[s.risk_level] ?? RISK_BAR.normal}`}
                     style={{ width: `${s.anomaly_score * 100}%` }}
@@ -244,7 +244,7 @@ export default function MLEntityBehavior({
                 {s.contributing_factors.length > 0 && (
                   <div className="flex flex-wrap gap-1">
                     {s.contributing_factors.map(f => (
-                      <span key={f} className="text-xs text-slate-500 bg-slate-800 rounded px-1.5 py-0.5">{f}</span>
+                      <span key={f} className="text-xs text-slate-600 dark:text-slate-500 bg-slate-100 dark:bg-slate-800 rounded px-1.5 py-0.5">{f}</span>
                     ))}
                   </div>
                 )}
@@ -259,7 +259,7 @@ export default function MLEntityBehavior({
       </div>
 
       {/* ── Behavioral anomaly detection results ──────────────────────────── */}
-      <div className="border-t border-slate-800 pt-4">
+      <div className="border-t border-slate-200 dark:border-slate-800 pt-4">
         <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">
           Deterministic Behavioral Checks
           <span className="ml-2 font-normal normal-case text-slate-600">
@@ -268,7 +268,7 @@ export default function MLEntityBehavior({
         </p>
 
         {behavError && (
-          <div className="bg-red-950/50 border border-red-800/50 text-red-300 rounded px-3 py-2 text-xs mb-3">
+          <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded px-3 py-2 text-xs mb-3">
             {behavError}
           </div>
         )}
@@ -299,7 +299,7 @@ export default function MLEntityBehavior({
                 { label: 'Window',            value: `${behavReport.analysis_window_hours.toFixed(1)}h`,             color: '#00F0FF' },
                 { label: 'Highest Severity',  value: behavReport.highest_severity.toUpperCase(),                     color: sevStatColor[behavReport.highest_severity] ?? '#64748b' },
               ].map(s => (
-                <div key={s.label} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 border border-slate-700">
+                <div key={s.label} className="bg-slate-100 dark:bg-slate-800 rounded-lg p-3 border border-slate-200 dark:border-slate-700">
                   <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">{s.label}</p>
                   <p className="text-sm font-bold" style={{ color: s.color }}>{s.value}</p>
                 </div>
@@ -309,7 +309,7 @@ export default function MLEntityBehavior({
             {/* Anomaly cards */}
             {behavReport.anomalies.length === 0 ? (
               <div className="text-center py-6">
-                <p className="text-slate-400 text-sm font-medium">No behavioral anomalies detected</p>
+                <p className="text-slate-600 dark:text-slate-400 text-sm font-medium">No behavioral anomalies detected</p>
                 <p className="text-slate-600 text-xs mt-1">
                   {behavReport.profiled_entities} entit{behavReport.profiled_entities === 1 ? 'y' : 'ies'} profiled — all within normal behavioural bounds
                 </p>

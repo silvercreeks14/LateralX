@@ -1,4 +1,4 @@
-﻿import { useState } from 'react'
+import { useState } from 'react'
 import { api } from '../api/client'
 import type { AttackStoryline, AttackStep, LateralPath } from '../types'
 
@@ -22,15 +22,15 @@ const TACTIC_COLORS: Record<string, string> = {
   'Impact':                '#FF6B00',
 }
 
-const CONFIDENCE_STYLE: Record<string, { color: string; bg: string }> = {
-  high:   { color: '#00F0FF', bg: '#00F0FF15' },
-  medium: { color: '#f59e0b', bg: '#f59e0b15' },
-  low:    { color: '#94a3b8', bg: '#94a3b820' },
+const CONFIDENCE_CLS: Record<string, string> = {
+  high:   'bg-sky-50 dark:bg-[#00F0FF]/[0.08] text-sky-600 dark:text-[#00F0FF] border border-sky-200 dark:border-[#00F0FF]/30',
+  medium: 'bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30',
+  low:    'bg-slate-100 dark:bg-slate-700/30 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-600/30',
 }
 
 function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
   const tacticColor = TACTIC_COLORS[step.tactic] ?? '#64748b'
-  const conf = CONFIDENCE_STYLE[step.confidence] ?? CONFIDENCE_STYLE.low
+  const confCls = CONFIDENCE_CLS[step.confidence] ?? CONFIDENCE_CLS.low
 
   return (
     <div className="flex gap-4">
@@ -45,7 +45,7 @@ function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
       </div>
 
       <div className="flex-1 pb-5">
-        <div className="bg-slate-100/60 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-700/40">
+        <div className="bg-slate-100/60 dark:bg-slate-800/60 rounded-xl p-4 border border-slate-200 dark:border-slate-700/40">
           <div className="flex items-start justify-between gap-2 mb-2">
             <div className="flex items-center gap-2 flex-wrap">
               <span
@@ -56,27 +56,24 @@ function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
               </span>
               <span className="text-xs font-mono text-slate-500">{step.technique_id}</span>
             </div>
-            <span
-              className="px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0"
-              style={{ background: conf.bg, color: conf.color }}
-            >
+            <span className={`px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0 ${confCls}`}>
               {step.confidence}
             </span>
           </div>
 
-          <p className="text-white text-sm font-medium mb-1 text-slate-900 dark:text-white">{step.technique_name}</p>
-          <p className="text-slate-400 text-xs mb-2">{step.description}</p>
+          <p className="text-sm font-medium mb-1 text-slate-900 dark:text-white">{step.technique_name}</p>
+          <p className="text-slate-600 dark:text-slate-400 text-xs mb-2">{step.description}</p>
 
           <div className="flex items-center gap-3 text-xs text-slate-500 flex-wrap">
-            <span className="font-mono text-slate-400">{step.host}</span>
-            {step.user && <span className="font-mono text-slate-400">→ {step.user}</span>}
+            <span className="font-mono text-slate-500 dark:text-slate-400">{step.host}</span>
+            {step.user && <span className="font-mono text-slate-500 dark:text-slate-400">→ {step.user}</span>}
             <span>{step.timestamp.slice(0, 19).replace('T', ' ')}</span>
           </div>
 
           {step.event_ids.length > 0 && (
             <div className="flex gap-1 mt-2 flex-wrap">
               {step.event_ids.map(id => (
-                <span key={id} className="px-1.5 py-0.5 bg-slate-700 text-slate-400 rounded text-xs font-mono">
+                <span key={id} className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-400 rounded text-xs font-mono">
                   EID:{id}
                 </span>
               ))}
@@ -90,15 +87,15 @@ function StepCard({ step, isLast }: { step: AttackStep; isLast: boolean }) {
 
 function LateralCard({ path }: { path: LateralPath }) {
   return (
-    <div className="flex items-center gap-3 bg-slate-100/60 dark:bg-slate-800/60 rounded-lg px-4 py-3 border border-slate-700/40">
-      <span className="font-mono text-sm text-slate-300 truncate">{path.from_host}</span>
+    <div className="flex items-center gap-3 bg-slate-100/60 dark:bg-slate-800/60 rounded-lg px-4 py-3 border border-slate-200 dark:border-slate-700/40">
+      <span className="font-mono text-sm text-slate-700 dark:text-slate-300 truncate">{path.from_host}</span>
       <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"
-        style={{ color: '#00F0FF' }}>
+        style={{ color: 'var(--brand)' }}>
         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
       </svg>
-      <span className="font-mono text-sm text-slate-300 truncate">{path.to_host}</span>
+      <span className="font-mono text-sm text-slate-700 dark:text-slate-300 truncate">{path.to_host}</span>
       <span className="text-xs text-slate-500 flex-shrink-0">via {path.user}</span>
-      <span className="ml-auto text-xs px-2 py-0.5 bg-blue-500/15 text-blue-400 rounded font-mono flex-shrink-0">
+      <span className="ml-auto text-xs px-2 py-0.5 bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 rounded font-mono flex-shrink-0">
         {path.method}
       </span>
     </div>
@@ -123,9 +120,9 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
     }
   }
 
-  const confStyle = storyline
-    ? (CONFIDENCE_STYLE[storyline.confidence] ?? CONFIDENCE_STYLE.low)
-    : CONFIDENCE_STYLE.low
+  const confCls = storyline
+    ? (CONFIDENCE_CLS[storyline.confidence] ?? CONFIDENCE_CLS.low)
+    : CONFIDENCE_CLS.low
 
   return (
     <div className="space-y-6">
@@ -165,21 +162,21 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
       </div>
 
       {error && (
-        <div className="bg-red-950/50 border border-red-800/50 text-red-300 rounded-xl px-4 py-3 text-sm">
+        <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-sm">
           {error}
         </div>
       )}
 
       {!storyline && !loading && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-2">
-            <svg className="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2">
+            <svg className="w-7 h-7 text-slate-400 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
             </svg>
           </div>
-          <p className="text-slate-400 text-sm font-medium">No storyline generated yet</p>
-          <p className="text-slate-600 text-xs max-w-xs">
+          <p className="text-slate-700 dark:text-slate-400 text-sm font-medium">No storyline generated yet</p>
+          <p className="text-slate-500 dark:text-slate-600 text-xs max-w-xs">
             Click Build Storyline to reconstruct the attack narrative with MITRE ATT&amp;CK
             technique mapping, lateral movement paths, and blast radius assessment.
           </p>
@@ -195,25 +192,22 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
                 <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Threat Actor Profile</p>
                 <p className="text-slate-900 dark:text-white font-bold text-xl">{storyline.threat_actor_profile}</p>
               </div>
-              <span
-                className="px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0"
-                style={{ background: confStyle.bg, color: confStyle.color }}
-              >
+              <span className={`px-3 py-1 rounded-full text-xs font-semibold flex-shrink-0 ${confCls}`}>
                 {storyline.confidence.toUpperCase()} CONFIDENCE
               </span>
             </div>
-            <div className="grid grid-cols-3 gap-4 text-sm border-t border-slate-800 pt-4">
+            <div className="grid grid-cols-3 gap-4 text-sm border-t border-slate-200 dark:border-slate-800 pt-4">
               <div>
                 <p className="text-xs text-slate-500 mb-1">Entry Vector</p>
-                <p className="text-slate-300 text-xs">{storyline.entry_vector}</p>
+                <p className="text-slate-700 dark:text-slate-300 text-xs">{storyline.entry_vector}</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Total Duration</p>
-                <p className="text-slate-300">{Math.round(storyline.total_duration_minutes)} min</p>
+                <p className="text-slate-700 dark:text-slate-300">{Math.round(storyline.total_duration_minutes)} min</p>
               </div>
               <div>
                 <p className="text-xs text-slate-500 mb-1">Scope</p>
-                <p className="text-slate-300">
+                <p className="text-slate-700 dark:text-slate-300">
                   {storyline.total_attack_steps} steps &middot; {storyline.total_lateral_paths} lateral paths
                 </p>
               </div>
@@ -236,7 +230,7 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
                         {t}
                       </span>
                       {i < storyline.tactic_progression.length - 1 && (
-                        <svg className="w-3 h-3 text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3 text-slate-400 dark:text-slate-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
                       )}
@@ -285,28 +279,28 @@ export default function StorylinePanel({ activeCaseId, selectedUploadId }: Props
                 { label: 'Accessed Resources',      items: storyline.blast_radius.accessed_resources,     color: '#f59e0b' },
                 { label: 'Persistence Mechanisms',  items: storyline.blast_radius.persistence_mechanisms, color: '#8b5cf6' },
               ].map(section => (
-                <div key={section.label} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-800">
+                <div key={section.label} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800">
                   <p className="text-xs font-semibold mb-2" style={{ color: section.color }}>
                     {section.label}
                   </p>
                   {section.items.length === 0 ? (
-                    <p className="text-slate-600 text-xs">None identified</p>
+                    <p className="text-slate-500 dark:text-slate-600 text-xs">None identified</p>
                   ) : (
                     <ul className="space-y-1">
                       {section.items.slice(0, 8).map((item, i) => (
-                        <li key={i} className="text-slate-300 text-xs font-mono truncate">{item}</li>
+                        <li key={i} className="text-slate-700 dark:text-slate-300 text-xs font-mono truncate">{item}</li>
                       ))}
                       {section.items.length > 8 && (
-                        <li className="text-slate-600 text-xs">+{section.items.length - 8} more</li>
+                        <li className="text-slate-500 dark:text-slate-600 text-xs">+{section.items.length - 8} more</li>
                       )}
                     </ul>
                   )}
                 </div>
               ))}
             </div>
-            <div className="mt-3 bg-white dark:bg-slate-900 rounded-xl px-4 py-3 border border-slate-800 flex items-center justify-between">
+            <div className="mt-3 bg-white dark:bg-slate-900 rounded-xl px-4 py-3 border border-slate-200 dark:border-slate-800 flex items-center justify-between">
               <span className="text-xs text-slate-500">Estimated Data at Risk</span>
-              <span className="text-sm font-semibold text-orange-400">
+              <span className="text-sm font-semibold text-orange-600 dark:text-orange-400">
                 {storyline.blast_radius.estimated_data_at_risk}
               </span>
             </div>

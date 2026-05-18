@@ -22,10 +22,10 @@ const SEVERITY_BORDER: Record<string, string> = {
 }
 
 const SEVERITY_BADGE: Record<string, string> = {
-  critical: 'bg-orange-500/15 text-orange-400 border border-orange-500/30',
-  high: 'bg-red-500/15 text-red-400 border border-red-500/30',
-  medium: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
-  low: 'bg-slate-700/50 text-slate-400 border border-slate-600/30',
+  critical: 'bg-orange-50 dark:bg-orange-500/15 text-orange-700 dark:text-orange-400 border border-orange-200 dark:border-orange-500/30',
+  high:     'bg-red-50 dark:bg-red-500/15 text-red-700 dark:text-red-400 border border-red-200 dark:border-red-500/30',
+  medium:   'bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30',
+  low:      'bg-slate-100 dark:bg-slate-700/50 text-slate-600 dark:text-slate-400 border border-slate-300 dark:border-slate-600/30',
 }
 
 function AnomalyCard({ a }: { a: BehavioralAnomaly }) {
@@ -60,7 +60,7 @@ function AnomalyCard({ a }: { a: BehavioralAnomaly }) {
         )}
       </div>
 
-      <div className="mt-2.5 h-1 bg-slate-700 rounded-full overflow-hidden">
+      <div className="mt-2.5 h-1 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all"
           style={{
@@ -133,21 +133,21 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
       </div>
 
       {error && (
-        <div className="bg-red-950/50 border border-red-800/50 text-red-300 rounded-xl px-4 py-3 text-sm">
+        <div className="bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800/50 text-red-700 dark:text-red-300 rounded-xl px-4 py-3 text-sm">
           {error}
         </div>
       )}
 
       {!report && !loading && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-16 flex flex-col items-center gap-3 text-center">
-          <div className="w-14 h-14 rounded-full bg-slate-800 flex items-center justify-center mb-2">
-            <svg className="w-7 h-7 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-14 h-14 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-2">
+            <svg className="w-7 h-7 text-slate-400 dark:text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
                 d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
           </div>
-          <p className="text-slate-400 text-sm font-medium">No behavioral analysis run yet</p>
-          <p className="text-slate-600 text-xs max-w-xs">
+          <p className="text-slate-700 dark:text-slate-400 text-sm font-medium">No behavioral analysis run yet</p>
+          <p className="text-slate-500 dark:text-slate-600 text-xs max-w-xs">
             Upload events and click Run Analysis to detect Z-score spikes, lateral
             movement velocity, auth failure bursts, and off-hours privilege escalation.
           </p>
@@ -163,7 +163,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
               { label: 'Window', value: `${report.analysis_window_hours.toFixed(1)}h`, color: '#00F0FF' },
               { label: 'Highest Severity', value: report.highest_severity.toUpperCase(), color: sevStatColor[report.highest_severity] ?? '#64748b' },
             ].map(s => (
-              <div key={s.label} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-800">
+              <div key={s.label} className="bg-white dark:bg-slate-900 rounded-xl p-4 border border-slate-200 dark:border-slate-800">
                 <p className="text-xs text-slate-500 mb-1 uppercase tracking-wide">{s.label}</p>
                 <p className="text-lg font-bold" style={{ color: s.color }}>{s.value}</p>
               </div>
@@ -172,16 +172,13 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
 
           {report.anomalies.length === 0 ? (
             <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-10 flex flex-col items-center gap-2">
-              <div
-                className="w-10 h-10 rounded-full flex items-center justify-center mb-1 border"
-                style={{ background: '#00F0FF15', borderColor: '#00F0FF30' }}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: '#00F0FF' }}>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center mb-1 border bg-sky-50 dark:bg-[#00F0FF]/[0.08] border-sky-200 dark:border-[#00F0FF]/30">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ color: 'var(--brand)' }}>
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                 </svg>
               </div>
-              <p className="text-slate-300 font-medium text-sm">No anomalies detected</p>
-              <p className="text-slate-600 text-xs">
+              <p className="text-slate-700 dark:text-slate-300 font-medium text-sm">No anomalies detected</p>
+              <p className="text-slate-500 dark:text-slate-600 text-xs">
                 {report.profiled_users} user(s) profiled — all within normal behavioral bounds
               </p>
             </div>

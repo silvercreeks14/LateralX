@@ -86,8 +86,11 @@ export default function AnalysisControls({
         <button
           onClick={() => onRunAnalysis(effectiveUploadId)}
           disabled={loading}
-          className="text-xs px-3 py-1.5 rounded-md font-medium disabled:opacity-40 transition-colors"
-          style={loading ? {} : { background: '#00F0FF18', color: '#00F0FF', border: '1px solid #00F0FF40' }}
+          className={`text-xs px-3 py-1.5 rounded-md font-medium disabled:opacity-40 transition-colors ${
+            loading
+              ? 'bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 border border-slate-300 dark:border-slate-700'
+              : 'bg-sky-50 dark:bg-[#00F0FF]/[0.08] text-sky-600 dark:text-[#00F0FF] border border-sky-200 dark:border-[#00F0FF]/40'
+          }`}
         >
           {loading ? 'Analyzing…' : hasResult ? 'Re-run Analysis' : 'Run Analysis'}
         </button>
@@ -95,18 +98,18 @@ export default function AnalysisControls({
         <button
           onClick={onCompareBaseline}
           disabled={baselineLoading}
-          className="text-xs text-teal-400 hover:text-teal-300 border border-teal-800/40 px-3 py-1.5 rounded-md disabled:opacity-40"
+          className="text-xs text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 border border-teal-200 dark:border-teal-800/40 px-3 py-1.5 rounded-md disabled:opacity-40"
         >
           {baselineLoading ? 'Comparing…' : 'Compare Baseline'}
         </button>
 
         {/* ── Export ─────────────────────────────────────────────────────── */}
         {hasResult && (
-          <div className="border-l border-slate-700 pl-2 ml-1">
+          <div className="border-l border-slate-300 dark:border-slate-700 pl-2 ml-1">
             <button
               onClick={handleExport}
               disabled={exporting}
-              className="text-xs border px-3 py-1.5 rounded-md text-slate-300 border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1.5"
+              className="text-xs border px-3 py-1.5 rounded-md text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-40 flex items-center gap-1.5"
               title={
                 activeCaseId
                   ? 'Export full case forensic report as HTML'
