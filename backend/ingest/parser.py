@@ -1,6 +1,6 @@
 """
 Multi-format forensic timeline parser.
-Supports: Plaso L2T CSV, Timesketch JSONL, and generic CSV.
+Supports: Plaso L2T CSV, Timesketch JSONL, generic CSV, Sysmon CSV, and LMD CSV.
 """
 
 import csv
@@ -856,19 +856,134 @@ def parse_network_csv(content: str) -> list[ForensicEvent]:
     return events
 
 
-def detect_and_parse(filename: str, content: str) -> list[ForensicEvent]:
+def parse_lmd_csv(content: str) -> list[ForensicEvent]:
+    """
+    Parse an LMD-labelled Sysmon CSV into ForensicEvent objects.
+
+    The LMD dataset adds a Label column to Sysmon-like telemetry. Label 0 is
+    treated as normal; any non-zero label is preserved as an LMD attack signal
+    and later consumed by the Random Forest scanner.
+    """
+    reader = csv.DictReader(StringIO(content))
+    if reader.fieldnames is None:
+        raise ValueError("CSV file has no headers.")
+
+    orig_map = {h.strip().lower(): h for h in reader.fieldnames if h}
+
+    def _get(row: dict, *keys: str, keep_zero: bool = False) -> str:
+        for key in keys:
+            val = row.get(orig_map.get(key.lower(), key), "") or ""
+            val = str(val).strip()
+            if not val or val.lower() in ("nan", "none", "-", "null"):
+                continue
+            if val == "0" and not keep_zero:
+                continue
+            return val
+        return ""
+
+    events: list[ForensicEvent] = []
+    for row in reader:
+        try:
+            timestamp = _get(row, "SystemTime", "timestamp", "datetime", "time", "CreationUtcTime")
+            if not timestamp:
+                timestamp = _dt.now(_tz.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+            raw_eid = _get(row, "EventID")
+            event_id = raw_eid.split(".")[0] if raw_eid else None
+
+            label_raw = _get(row, "Label", keep_zero=True).split(".")[0] or "0"
+            is_attack = label_raw not in ("", "0")
+
+            host = _normalize_hostname(_get(row, "Computer", "SourceHostname", "hostname", "host"))
+            user = _get(row, "User", "SourceUser", "username") or None
+
+            desc_parts: list[str] = []
+            if is_attack:
+                desc_parts.append(f"[LMD ATTACK label={label_raw}]")
+            for label, keys in (
+                ("Rule", ("RuleName",)),
+                ("Image", ("Image",)),
+                ("CmdLine", ("CommandLine",)),
+                ("Target", ("TargetImage", "TargetFilename", "TargetObject")),
+                ("Details", ("Details",)),
+                ("Category", ("Category",)),
+            ):
+                value = _get(row, *keys)
+                if value:
+                    desc_parts.append(f"{label}: {value}")
+
+            src_ip = _get(row, "SourceIp")
+            dst_ip = _get(row, "DestinationIp")
+            dst_port = _get(row, "DestinationPort")
+            if src_ip or dst_ip:
+                net = f"Net: {src_ip} -> {dst_ip}"
+                if dst_port:
+                    net += f":{dst_port.split('.')[0]}"
+                desc_parts.append(net)
+
+            description = " | ".join(desc_parts)
+            if not description:
+                description = json.dumps({
+                    k: v for k, v in row.items()
+                    if v and str(v).strip() not in ("", "0", "-")
+                })
+
+            extra: dict = {"lmd_label": label_raw, "lmd_is_attack": is_attack}
+            for field in (
+                "Image", "CommandLine", "ParentImage", "ParentCommandLine",
+                "Hashes", "SourceIp", "DestinationIp", "DestinationPort",
+                "Protocol", "RuleName", "TargetObject", "GrantedAccess",
+            ):
+                value = _get(row, field)
+                if value:
+                    extra[field] = value
+
+            events.append(ForensicEvent(
+                timestamp=timestamp,
+                event_type="LMD:Attack" if is_attack else (_get(row, "EventType", "RuleName") or "LMD:Normal"),
+                source_host=host,
+                user=user,
+                description=description[:1000],
+                raw_source=RawSource.GENERIC,
+                event_id=event_id,
+                extra=extra,
+            ))
+        except Exception:
+            continue
+
+    return events
+
+
+def detect_and_parse(filename: str, content: str, parser_hint: str | None = None) -> list[ForensicEvent]:
     """
     Auto-detect the file format by extension and first-line content,
     then dispatch to the appropriate parser.
 
     Rules:
-      .jsonl / .json  -> parse_timesketch_jsonl
+      parser_hint="lmd" -> parse_lmd_csv
+      .jsonl / .json   -> parse_timesketch_jsonl
       .csv with "timestamp_desc" AND "parser" in first line -> parse_plaso_csv
+      .csv with LMD "label" column -> parse_lmd_csv
       .csv with Sysmon columns ("computer" + "rulename" OR "eventid" + "image") -> parse_sysmon_csv
       .csv with network columns (src_ip / source_ip / src_addr) -> parse_network_csv
-      any other .csv  -> parse_generic_csv
-      anything else   -> ValueError
+      any other .csv   -> parse_generic_csv
+      anything else    -> ValueError
     """
+    if parser_hint:
+        hint = parser_hint.strip().lower()
+        if hint == "lmd":
+            return parse_lmd_csv(content)
+        if hint == "sysmon":
+            return parse_sysmon_csv(content)
+        if hint == "plaso":
+            return parse_plaso_csv(content)
+        if hint in ("timesketch", "jsonl"):
+            return parse_timesketch_jsonl(content)
+        if hint == "network":
+            return parse_network_csv(content)
+        if hint == "generic":
+            return parse_generic_csv(content)
+
     name_lower = filename.lower()
 
     if name_lower.endswith(".jsonl") or name_lower.endswith(".json"):
@@ -879,6 +994,8 @@ def detect_and_parse(filename: str, content: str) -> list[ForensicEvent]:
         header_cols = {c.strip() for c in first_line.split(",")}
         if "timestamp_desc" in header_cols and "parser" in header_cols:
             return parse_plaso_csv(content)
+        if "label" in header_cols and ("computer" in header_cols or "image" in header_cols):
+            return parse_lmd_csv(content)
         # Sysmon CSV: has 'computer' + 'rulename', or 'eventid' + 'image'
         if ("computer" in header_cols and "rulename" in header_cols) or \
            ("eventid" in header_cols and "image" in header_cols):
@@ -890,5 +1007,5 @@ def detect_and_parse(filename: str, content: str) -> list[ForensicEvent]:
 
     raise ValueError(
         f"Unsupported file extension for '{filename}'. "
-        "Supported formats: .csv (Plaso L2T or generic), .jsonl / .json (Timesketch)."
+        "Supported formats: .csv (Plaso L2T, Sysmon, LMD, network, or generic), .jsonl / .json (Timesketch)."
     )

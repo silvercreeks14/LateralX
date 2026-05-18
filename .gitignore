@@ -1,6 +1,16 @@
 .env
 __pycache__/
 *.db
+*.db-shm
+*.db-wal
+venv/
+node_modules/
+dist/
+*.pyc
+.pytest_cache/
+.env
+__pycache__/
+*.db
 venv/
 node_modules/
 dist/
