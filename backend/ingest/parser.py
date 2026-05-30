@@ -69,6 +69,42 @@ def _deep_parse_sysmon_message(message_text: str) -> dict:
     return result
 
 
+# Compiled separator pattern for single-line "Key: Value. Key: Value." descriptions.
+# Matches the ". FieldName:" boundary so it can be replaced with a newline, making
+# the text parseable by _deep_parse_sysmon_message (which expects multiline format).
+_SYSMON_INLINE_SPLIT_RE = re.compile(
+    r"\.\s+(?=(?:Image|CommandLine|ParentImage|ParentCommandLine"
+    r"|TargetImage|GrantedAccess|UtcTime)\s*:)",
+    re.IGNORECASE,
+)
+
+
+def _extract_sysmon_inline(text: str) -> dict:
+    """
+    Extract Sysmon key-value pairs from a single-line period-separated description.
+
+    Handles the format produced by some SIEM exports and custom CSV scenarios:
+      "New process. Image: C:\\cmd.exe. Parent: w3wp.exe. CommandLine: cmd.exe /c whoami."
+
+    Strategy:
+      1. Normalise the "Parent:" shorthand to "ParentImage:" so the canonical
+         Sysmon key mapping in _deep_parse_sysmon_message recognises it.
+      2. Insert newlines before known Sysmon field names.
+      3. Delegate to _deep_parse_sysmon_message which handles multiline format.
+
+    Returns an empty dict when no Sysmon field patterns are found.
+    """
+    if not text or ":" not in text:
+        return {}
+    # "Parent:" is a shorthand used by some SIEM exports for "ParentImage:".
+    # Only normalise the bare word — leave "ParentImage:" and "ParentCommandLine:" intact.
+    text = re.sub(r"\bParent(?!Image|CommandLine)\b", "ParentImage", text, flags=re.IGNORECASE)
+    converted = _SYSMON_INLINE_SPLIT_RE.sub("\n", text)
+    if "\n" not in converted:
+        return {}
+    return _deep_parse_sysmon_message(converted)
+
+
 def _find_column(headers: list[str], candidates: list[str]) -> str | None:
     """Return the first candidate column name that exists in headers, else None."""
     for c in candidates:
@@ -618,10 +654,14 @@ def parse_generic_csv(content: str) -> list[ForensicEvent]:
             raw_user = norm_row.get(user_col) if user_col else None
             user = _normalize_username(raw_user) or _extract_user_from_description(description)
 
-            # Deep-parse Sysmon Message block when present
+            # Extract structured fields from the message column when present, or fall
+            # back to inline extraction for CSV files that embed Image/CommandLine
+            # directly in the description field ("Key: Value. Key: Value." format).
             sysmon_extra: dict = {}
             if msg_col:
                 sysmon_extra = _deep_parse_sysmon_message(norm_row.get(msg_col, "") or "")
+            elif description:
+                sysmon_extra = _extract_sysmon_inline(description)
 
             events.append(
                 ForensicEvent(

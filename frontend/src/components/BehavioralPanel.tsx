@@ -43,7 +43,7 @@ function AnomalyCard({ a }: { a: BehavioralAnomaly }) {
           <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
             {ANOMALY_LABELS[a.anomaly_type] ?? a.anomaly_type}
           </span>
-          <span className="text-slate-900 dark:text-white text-sm font-mono">{a.user}</span>
+          <span className="text-slate-900 dark:text-white text-sm font-mono">{a.entity}</span>
         </div>
         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold uppercase flex-shrink-0 ${badgeClass}`}>
           {a.severity}
@@ -159,7 +159,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             {[
               { label: 'Anomalies', value: String(report.anomalies.length), color: report.anomalies.length > 0 ? '#FF6B00' : '#00F0FF' },
-              { label: 'Users Profiled', value: String(report.profiled_users), color: '#00F0FF' },
+              { label: 'Users Profiled', value: String(report.profiled_entities), color: '#00F0FF' },
               { label: 'Window', value: `${report.analysis_window_hours.toFixed(1)}h`, color: '#00F0FF' },
               { label: 'Highest Severity', value: report.highest_severity.toUpperCase(), color: sevStatColor[report.highest_severity] ?? '#64748b' },
             ].map(s => (
@@ -179,7 +179,7 @@ export default function BehavioralPanel({ activeCaseId, selectedUploadId }: Prop
               </div>
               <p className="text-slate-700 dark:text-slate-300 font-medium text-sm">No anomalies detected</p>
               <p className="text-slate-500 dark:text-slate-600 text-xs">
-                {report.profiled_users} user(s) profiled — all within normal behavioral bounds
+                {report.profiled_entities} user(s) profiled — all within normal behavioral bounds
               </p>
             </div>
           ) : (

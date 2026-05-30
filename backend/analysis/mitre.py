@@ -201,7 +201,7 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
     # SMB/Admin Shares — extended with Impacket tool names used by non-Empire frameworks.
     # smbexec / wmiexec / dcomexec are Impacket suites used by Cobalt Strike, CrackMapExec,
     # Sliver, and custom ransomware operators as psexec alternatives.
-    (["net use", "psexec", "\\admin$", "\\c$", "\\ipc$", "\\d$",
+    (["net use ", "net use\\", "psexec", "\\admin$", "\\c$", "\\ipc$", "\\d$",
       "logon type: 3", "logon type: 9",    # Type 9 = NewCredentials (over-pass-the-hash)
       "smbexec", "wmiexec", "dcomexec", "atexec"],
      MitreTechnique(id="T1021.002", name="SMB/Windows Admin Shares", tactic="Lateral Movement")),

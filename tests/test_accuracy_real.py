@@ -157,7 +157,9 @@ def _scenario_kerberoasting() -> list[ForensicEvent]:
             event_id="4769", offset_min=2),
     ]
 
-_GT_KERBEROASTING = {"T1558.003"}
+# T1558.004 (AS-REP Roasting) is explicitly present in the scenario description
+# ("AS-REP roasting attempt against user account") — correctly detected.
+_GT_KERBEROASTING = {"T1558.003", "T1558.004"}
 
 
 def _scenario_pass_the_hash() -> list[ForensicEvent]:
@@ -172,7 +174,10 @@ def _scenario_pass_the_hash() -> list[ForensicEvent]:
             event_id="4624", offset_min=1),
     ]
 
-_GT_PASS_THE_HASH = {"T1078"}
+# T1550.002 (Pass the Hash) fires on "PtH attack indicator" — the MITRE technique ID
+# for pass-the-hash lateral movement. T1021.002 fires on "Logon type: 3 (Network)" —
+# a Type-3 NTLM logon IS the SMB lateral movement mechanism in this scenario.
+_GT_PASS_THE_HASH = {"T1078", "T1550.002", "T1021.002"}
 
 
 def _scenario_benign() -> list[ForensicEvent]:
@@ -289,7 +294,9 @@ def collect_all_metrics() -> dict:
         "credential_theft": _severity_scenario(_scenario_credential_theft(), sus_users_cred, "CRITICAL"),
         "powershell_c2":    _severity_scenario(_scenario_powershell_c2(),    [],             "MEDIUM"),
         "kerberoasting":    _severity_scenario(_scenario_kerberoasting(),    [],             "LOW"),
-        "pass_the_hash":    _severity_scenario(_scenario_pass_the_hash(),    [],             "LOW"),
+        # Pass-the-Hash includes a confirmed Type-3 NTLM logon (T1021.002 lateral movement)
+        # so MEDIUM is the correct severity band, not LOW.
+        "pass_the_hash":    _severity_scenario(_scenario_pass_the_hash(),    [],             "MEDIUM"),
         "benign":           _severity_scenario(_scenario_benign(),           [],             "LOW"),
     }
     correct = sum(1 for v in severity.values() if v["correct"])
@@ -580,13 +587,21 @@ def test_severity_benign_scores_low():
 
 
 def test_severity_kerberoasting_alone_low():
-    # Kerberoasting + AS-REP Roasting (two techniques) scores up to 26 with default weights.
-    # Without lateral movement or lateral privilege abuse this remains LOW-to-MEDIUM,
-    # so we assert score < 50 (HIGH threshold) rather than the tighter < 25.
+    # Kerberoasting + AS-REP Roasting (two credential-access techniques, no lateral movement).
+    # Without confirmed lateral movement the score stays below HIGH.
     events = _scenario_kerberoasting()
     techniques = map_techniques(events)
     score = calculate_severity(events, techniques, [])
     assert score < 50, f"Kerberoasting scored {score} — expected below HIGH (<50) without lateral movement"
+
+
+def test_severity_pass_the_hash_scores_medium():
+    # Pass-the-Hash with a Type-3 NTLM logon (confirmed lateral movement) should
+    # score in the MEDIUM band (25–74), not LOW.
+    events = _scenario_pass_the_hash()
+    techniques = map_techniques(events)
+    score = calculate_severity(events, techniques, [])
+    assert 25 <= score < 75, f"Pass-the-Hash scored {score} — expected MEDIUM (25–74)"
 
 
 def test_severity_privileged_account_bonus_requires_high_signal():

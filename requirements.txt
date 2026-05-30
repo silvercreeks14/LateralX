@@ -20,3 +20,4 @@ pyotp>=2.9.0
 qrcode[pil]>=7.4
 pandas>=2.0.0
 pyvis>=0.3.2
+pystray>=0.19.5

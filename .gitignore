@@ -1,18 +1,30 @@
-.env
+# Python
+.venv/
+venv/
 __pycache__/
+*.pyc
+*.pyo
+
+# Database — distributed via installer, not stored in repo
 *.db
 *.db-shm
 *.db-wal
-venv/
-node_modules/
-dist/
-*.pyc
-.pytest_cache/
+
+# Environment — contains real credentials, never commit
 .env
-__pycache__/
-*.db
-venv/
-node_modules/
+
+# Build outputs
 dist/
-*.pyc
+installer/
+lateralx.log
+
+# Dependencies
+node_modules/
+
+# Test cache
 .pytest_cache/
+
+# Presentation files — too large for source control
+*.pdf
+*.pptx
+LateralX_Poster.png

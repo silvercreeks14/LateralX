@@ -131,6 +131,14 @@ _KEYWORDS: dict[str, list[str]] = {
         "dpapi::", "vault::cred", "targetimage lsass",
         "sharpdpapi", "secretsdump", "reg save hklm\\\\sam",
         "reg save hklm\\sam", "ntlmrelayx", "shadow credentials",
+        # Phishing-delivered credential theft (MITRE T1566 → T1003)
+        "winword.exe", "excel.exe spawning", "macro_runner", "macro runner",
+        "wscript.exe macro", "parent: winword", "parent: excel",
+        "office macro", "malicious document", "phishing attachment",
+        "mshta credential", "sedebugprivilege seimpersonateprivilege",
+        "bad password logon", "failed logon bad password",
+        "stage2.exe", "stage1.exe", "dropped payload credential",
+        "mimi", "rundll32 temp", "mimilib",
     ],
     "data_exfiltration": [
         "exfiltrat", "data theft", "data exfil",
@@ -159,6 +167,15 @@ _KEYWORDS: dict[str, list[str]] = {
         "high port connection", "non-standard port", "unusual port",
         "periodic connection", "sleep interval", "jitter",
         "encoded payload", "obfuscated command",
+        # Web shell C2 (MITRE T1505.003) — attacker-controlled webshell as C2 channel
+        "webshell", "web shell", "aspx shell", "php shell", "jsp shell",
+        "china chopper", "phpspy", "weevely", "b374k", "c99 shell",
+        "shell.php", "cmd.php", "upload.php", "image.php?cmd=",
+        "post /shell", "http post command execution", "web shell command",
+        "iis worker spawning cmd", "w3wp.exe spawning", "httpd spawning",
+        "apache spawning cmd", "nginx spawning", "sqlservr spawning",
+        "external allow outbound", "inbound 80 allow outbound 443",
+        "internet-facing server outbound", "webserver outbound callback",
         "pipe created", "pipe connected", "msse-", "createremotethread",
         "malleable c2", "teamserver", "grpc", "named pipe c2",
         "check-in", "checkin", "implant", "agent.exe --connect",
@@ -396,6 +413,17 @@ _TEMPLATES: dict[str, list[str]] = {
         "NTLM relay ntlmrelayx responder poisoning credential capture relay",
         "DCSync lsadump::dcsync drsuapi DS-Replication credential dump all hashes",
         "secretsdump impacket domain all hashes extracted credential theft active directory",
+        # Phishing-delivered credential theft (T1566 → T1003 chain)
+        "New process. Image: C:\\Windows\\System32\\wscript.exe. Parent: WINWORD.EXE macro_runner credential theft phishing delivery",
+        "WINWORD.EXE spawning wscript.exe macro runner office macro execution credential theft phishing",
+        "Special privileges assigned SeDebugPrivilege SeImpersonatePrivilege stage2.exe credential theft payload",
+        "Process Command Line: rundll32.exe C:\\Windows\\Temp\\mimi credential dump phishing delivery mimikatz",
+        "New process. Image: C:\\Windows\\Temp\\stage2.exe. Parent: powershell.exe. CommandLine: stage2.exe -c C2 credential theft stager",
+        "Account failed to log on Bad password logon type 3 multiple failures password spray credential theft",
+        "wscript.exe /b macro_runner.vbs WINWORD phishing macro execution credential theft delivery",
+        "rundll32.exe Windows\\Temp mimilib credential dump phishing payload",
+        "SeDebugPrivilege SeImpersonatePrivilege assigned stage2 dropped payload credential theft",
+        "Office macro execution WINWORD wscript cmd powershell credential theft chain T1566 T1003",
     ],
     "data_exfiltration": [
         "Process Command Line: powershell.exe -Command Invoke-RestMethod -Method Post -Uri https://api.dropboxapi.com/2/files/upload Authorization Bearer token -InFile backup_nov22.b64. Dropbox API 4.2GB base64-encoded archive exfiltrated",
@@ -716,19 +744,27 @@ def _extract_features(events: list) -> list[float]:
 # Resolve sample_data/ relative to this module: backend/analysis/ → repo root → sample_data/
 _SAMPLE_DIR = _Path(__file__).resolve().parent.parent.parent / "sample_data"
 
-# Maps JSONL filename stem → attack category label
+# Maps JSONL filename stem → attack category label.
+# The loader searches sample_data/ recursively, so subdirectory files are found
+# automatically — only the stem (filename without .jsonl) needs to be listed here.
 _SCENARIO_LABEL_MAP: dict[str, str] = {
+    # ── Root-level scenario files (legacy flat layout) ──────────────────────
     "scenario_ransomware":                    "ransomware",
     "scenario_apt_kerberoasting":             "kerberoasting",
-    "scenario_insider_exfil":                "data_exfiltration",
-    "scenario_linux_webshell":               "privilege_escalation",
-    "scenario_lolbas":                       "defense_evasion",
-    "scenario_c2_cobalt_strike":             "c2_communication",
-    "scenario_credential_theft":             "credential_theft",
-    "scenario_lateral_movement_smb":         "lateral_movement",
-    "scenario_reconnaissance_ad":            "reconnaissance",
-    "scenario_privilege_escalation_windows": "privilege_escalation",
-    "scenario_persistence_wmi":              "persistence",
+    "scenario_insider_exfil":                 "data_exfiltration",
+    "scenario_linux_webshell":                "c2_communication",
+    "scenario_lolbas":                        "defense_evasion",
+    "scenario_c2_cobalt_strike":              "c2_communication",
+    "scenario_credential_theft":              "credential_theft",
+    "scenario_lateral_movement_smb":          "lateral_movement",
+    "scenario_reconnaissance_ad":             "reconnaissance",
+    "scenario_privilege_escalation_windows":  "privilege_escalation",
+    "scenario_persistence_wmi":               "persistence",
+    "scenario_windows_attack":                "lateral_movement",
+    # ── AD Full Attack Chain (sample_data/01_AD_Full_Attack_Chain/) ─────────
+    # Not used as a test scenario — safe to use for training
+    "ad_attack_scenario":                     "lateral_movement",
+    "dc01_security_eventlog":                 "lateral_movement",
 }
 
 
@@ -736,32 +772,45 @@ def _load_real_sessions(data_dir: _Path = _SAMPLE_DIR) -> dict[str, list[list[di
     """
     Load labeled attack sessions from JSONL scenario files.
 
-    Each file is treated as one complete labeled session.  Returns a dict
-    mapping category → list of sessions (each session is a list of event dicts).
-    Missing files are silently skipped so the classifier degrades gracefully.
+    Searches data_dir recursively so that scenario files stored in subdirectories
+    (e.g. sample_data/12_Turla_APT_Eval/01_kerberoasting.jsonl) are discovered
+    automatically.  Each file is treated as one complete labeled session.
+    Returns a dict mapping category → list of sessions.
     """
     sessions: dict[str, list[list[dict]]] = {cat: [] for cat in ATTACK_CATEGORIES}
 
-    for stem, cat in _SCENARIO_LABEL_MAP.items():
-        path = data_dir / f"{stem}.jsonl"
-        if not path.exists():
-            continue
+    # Build a reverse lookup: stem → category
+    stem_to_cat = dict(_SCENARIO_LABEL_MAP)
+
+    # Walk the entire sample_data tree once
+    loaded = 0
+    for jsonl_path in sorted(data_dir.rglob("*.jsonl")):
+        cat = stem_to_cat.get(jsonl_path.stem)
+        if cat is None:
+            continue  # unlabelled file — skip
         events: list[dict] = []
         try:
-            with open(path, encoding="utf-8") as fh:
+            with open(jsonl_path, encoding="utf-8", errors="replace") as fh:
                 for line in fh:
                     line = line.strip()
                     if line:
-                        events.append(_json.loads(line))
+                        try:
+                            events.append(_json.loads(line))
+                        except _json.JSONDecodeError:
+                            pass
         except Exception as exc:
-            logger.warning("Could not load scenario file %s: %s", path.name, exc)
+            logger.warning("Could not load scenario file %s: %s", jsonl_path.name, exc)
             continue
         if events:
             sessions[cat].append(events)
+            loaded += 1
+            logger.debug("Loaded %s → %s (%d events)", jsonl_path.name, cat, len(events))
 
     total = sum(len(v) for v in sessions.values())
-    if total:
-        logger.info("Loaded %d real scenario sessions from %s", total, data_dir)
+    logger.info(
+        "Loaded %d real scenario files (%d labeled sessions) from %s",
+        loaded, total, data_dir,
+    )
     return sessions
 
 
@@ -937,7 +986,7 @@ class AttackClassifier:
         if not _SKLEARN:
             return
         try:
-            X, y = _generate_training_data(n_per_class=300)
+            X, y = _generate_training_data(n_per_class=400)
             X_arr = np.array(X, dtype=np.float32)
             clf = RandomForestClassifier(
                 n_estimators=200,

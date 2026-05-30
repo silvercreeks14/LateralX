@@ -579,7 +579,7 @@ export default function GraphView({ graphData, activeCaseId, selectedUploadId }:
       el.removeClass('faded')
       el.connectedEdges().filter(`[attack_stage="${stage}"]`).removeClass('faded')
     })
-    const targets = cy.collection(nodeIds.map(id => cy.getElementById(id)).filter(el => el.length > 0))
+    const targets = cy.nodes().filter(node => nodeIds.includes(node.id()))
     if (targets.length > 0) cy.fit(targets, 60)
   }, [])
 
