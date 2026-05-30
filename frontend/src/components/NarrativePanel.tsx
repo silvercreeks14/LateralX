@@ -67,14 +67,11 @@ function LoadingScreen() {
   return (
     <div className="bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-14 flex flex-col items-center gap-5 text-center">
       <div className="relative">
-        <svg className="animate-spin h-12 w-12" fill="none" viewBox="0 0 24 24" style={{ color: 'var(--brand)' }}>
+        <svg className="animate-spin h-12 w-12 text-[#00F0FF]" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-20" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" />
           <path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
         </svg>
-        <div
-          className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold"
-          style={{ color: 'var(--brand)' }}
-        >
+        <div className="absolute inset-0 flex items-center justify-center text-xs font-mono font-bold text-[#00F0FF]">
           {fmtElapsed(elapsed)}
         </div>
       </div>
@@ -94,13 +91,13 @@ function LoadingScreen() {
         />
       </div>
 
-      <p className="text-xs text-slate-600 max-w-xs">
+      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs">
         You can navigate to other sections — analysis continues in the background
         and results will appear here when complete.
       </p>
 
       {elapsed > 30 && (
-        <div className="text-xs text-slate-500 bg-slate-100 dark:bg-slate-800 rounded-lg px-3 py-2 max-w-xs">
+        <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-lg px-3 py-2 max-w-xs">
           Tip: <span className="text-slate-700 dark:text-slate-300">Quick Scan</span> takes &lt;5 seconds and
           provides MITRE, IOCs, and ML scores without waiting for Ollama.
         </div>
