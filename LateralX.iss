@@ -27,7 +27,6 @@ DisableProgramGroupPage=yes
 SetupIconFile=lateralx.ico
 UninstallDisplayIcon={app}\lateralx.ico
 WizardStyle=modern
-WizardSmallImageFile=lateralx.ico
 
 ; Output
 OutputDir=installer
@@ -41,7 +40,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 ; ── Optional tasks ───────────────────────────────────────────────────────────
 [Tasks]
-Name: "desktopicon"; Description: "Create a &desktop shortcut"; Flags: checked
+Name: "desktopicon"; Description: "Create a &desktop shortcut"
 
 ; ── Files to install ─────────────────────────────────────────────────────────
 [Files]

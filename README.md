@@ -79,42 +79,64 @@ FastAPI backend (Python 3.11+)
 
 ## Quick Start
 
-### Prerequisites
+### Option 1 — Windows Installer (recommended)
 
-- Python 3.11+
-- Node.js 18+
-- (Optional) [Ollama](https://ollama.com/) for LLM narrative generation
+**Prerequisite:** [Python 3.11+](https://python.org) — during install, check **Add Python to PATH**.
 
-### Install and run
+1. Download **[LateralX-Setup.exe](https://github.com/silvercreeks14/FIP/releases/latest)** from the Releases page
+2. Double-click and follow the installer (no administrator rights required)
+3. The installer silently installs all Python dependencies (~1 minute, requires internet once)
+4. Check **Launch LateralX now** on the final screen — or use the desktop shortcut any time after
+
+Open `http://localhost:8000` and log in with username `admin`, password `ForensicAdmin2024!`.
+
+To stop LateralX: right-click the **LX** tray icon near the clock → **Exit**, or use **Stop LateralX** from the Start Menu.
+
+---
+
+### Option 2 — Developer Setup (manual)
+
+**Prerequisites:** Python 3.11+, Node.js 18+
 
 ```bash
-# 1. Clone and install backend dependencies
+# 1. Install Python dependencies
 pip install -r requirements.txt
 
-# 2. Install frontend dependencies
-cd frontend && npm install && cd ..
+# 2. Build the frontend (once — output goes to frontend/dist/)
+cd frontend && npm install && npm run build && cd ..
 
-# 3. Start the backend  (default admin: ForensicAdmin2024!)
-uvicorn main:app --reload
+# 3. Start the server — serves both API and built React app
+python main.py
+```
 
-# 4. Start the frontend (separate terminal)
+Open `http://localhost:8000`.
+
+**For hot-reload during frontend development:**
+
+```bash
+# Terminal 1 — backend
+python main.py
+
+# Terminal 2 — frontend dev server
 cd frontend && npm run dev
 ```
 
-Open `http://localhost:5173` and log in with username `admin`.
+Frontend dev server runs at `http://localhost:5173` and proxies API calls to the backend.
 
-To use a custom admin password, set the environment variable before starting:
+**Custom admin password:**
 
 ```bash
-set ADMIN_PASSWORD=YourSecurePassword   # Windows
-export ADMIN_PASSWORD=YourSecurePassword # Linux / macOS
+set ADMIN_PASSWORD=YourSecurePassword    # Windows
+export ADMIN_PASSWORD=YourSecurePassword  # Linux / macOS
 ```
+
+---
 
 ### Optional: Ollama LLM
 
 ```bash
-ollama pull llama3          # or any model supported by Ollama
-ollama serve                # starts on localhost:11434
+ollama pull llama3    # or any model supported by Ollama
+ollama serve          # starts on localhost:11434
 ```
 
 LateralX auto-detects the running Ollama instance. If Ollama is absent, narrative generation is skipped and all other features work normally.
@@ -425,9 +447,16 @@ frontend/
     App.tsx                   — Root layout, navigation, dark mode
 
 backend/schema.py             — Pydantic request/response models
-main.py                       — FastAPI app, CORS, security headers, bootstrap
+main.py                       — FastAPI app, CORS, security headers, SPA serving, bootstrap
 requirements.txt              — Python dependencies
 sample_data/                  — 14 pre-built attack scenarios (JSONL / CSV / JSON)
+
+launcher.pyw                  — System tray launcher (no terminal window)
+start.vbs                     — Silent launcher used by the installer shortcut
+stop.bat                      — One-click server shutdown
+LateralX.iss                  — Inno Setup installer script (builds LateralX-Setup.exe)
+make_ico.py                   — Generates lateralx.ico from brand colours
+lateralx.ico                  — Branded app icon (cyan rounded rectangle, dark LX)
 ```
 
 ---
@@ -562,7 +591,8 @@ Isolation Forest trained on a synthetic corpus with **54 unique users** across 1
 - TOTP (RFC 6238) available for admin account
 - Audit log uses SHA256 hash chaining — any tampering breaks chain verification
 - OWASP security headers injected on every response (CSP, X-Frame-Options, X-Content-Type-Options)
-- CORS restricted to `localhost:5173` and `localhost:3000` by default
+- In production mode (installer / `python main.py`), FastAPI serves the built React app — frontend and API are same-origin so CORS is not exercised
+- In development mode (`npm run dev` + `python main.py`), CORS is restricted to `localhost:5173` and `localhost:3000`
 - Designed for local / air-gapped deployment; no telemetry, no cloud dependencies
 
 ---
