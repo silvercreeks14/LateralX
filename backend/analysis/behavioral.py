@@ -665,7 +665,7 @@ def _check_wmi_shell_spawn(events: list[ForensicEvent]) -> list[dict]:
 
     spawn_events = [
         e for e in events
-        if e.event_id == "1"
+        if e.event_id in ("1", "4688")
         and e.extra
         and "wmiprvse" in (e.extra.get("ParentImage") or "").lower()
         and any(sh in (e.extra.get("Image") or "").lower() for sh in _SHELLS)

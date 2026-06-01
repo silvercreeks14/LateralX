@@ -40,6 +40,11 @@ _WEIGHTS: dict[str, int] = {
     "T1021.001": 8,   # RDP lateral movement
     "T1021.006": 7,   # WinRM lateral movement
     # ── Other techniques ─────────────────────────────────────────────────────
+    "T1566.001": 8,    # Spearphishing Attachment — initial access via malicious email
+    "T1204.002": 6,    # Malicious File — user executes macro-enabled document
+    "T1059.005": 5,    # VBScript execution
+    "T1070.001": 7,    # Clear Windows Event Logs — defense evasion / covering tracks
+    "T1134": 10,       # Access Token Manipulation — privilege escalation via impersonation
     "T1078": 5,       # Valid accounts
     "T1105": 7,       # Tool download
     "T1059.001": 7,   # PowerShell
@@ -47,6 +52,8 @@ _WEIGHTS: dict[str, int] = {
     "T1047": 6,       # WMI execution
     "T1059.003": 4,   # Command shell
     "T1218.010": 4,   # Regsvr32
+    "T1041": 12,       # Exfiltration Over C2 Channel
+    "T1048": 9,        # Exfiltration Over Alternative Protocol
     "T1048.003": 9,   # Exfiltration over unencrypted protocol
     "T1498": 18,      # Network Denial of Service
     "T1498.001": 18,  # Direct Network Flood (inbound DDoS)

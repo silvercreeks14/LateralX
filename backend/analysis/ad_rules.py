@@ -403,7 +403,7 @@ def _dcs006(events):
 def _dcs007(events):
     """Sysmon EID 1 — comsvcs.dll MiniDump (living-off-the-land LSASS dump)."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "comsvcs", "MiniDump", "rundll32")
         and _desc_contains(e, "lsass", "full")
     ]
@@ -496,7 +496,7 @@ def _lat003(events):
 def _lat004(events):
     """Sysmon EID 1 — wmic.exe /node: or Invoke-WmiMethod (WMI lateral)."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "wmic", "WmiMethod", "Win32_Process")
         and _desc_contains(e, "/node:", "Create", "CommandLineEventConsumer")
     ]
@@ -519,7 +519,7 @@ def _lat004(events):
 def _lat005(events):
     """Sysmon EID 1 — psexec or smbexec in command line."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "psexec", "smbexec", "paexec", "remcom")
     ]
     seen: set[str] = set()
@@ -958,7 +958,7 @@ def _pers008(events):
 def _recon001(events):
     """Sysmon EID 1 — BloodHound/SharpHound LDAP reconnaissance."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "bloodhound", "sharphound", "SharpView",
                           "powerview", "Get-NetUser", "Get-NetGroup",
                           "Invoke-BloodHound")
@@ -1004,7 +1004,7 @@ def _recon002(events):
 def _recon003(events):
     """Sysmon EID 1 — nltest, net group 'domain', dsquery commands."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "nltest", "dsquery", "ldapsearch",
                           "net group \"domain", "net user /domain",
                           "gpresult", "whoami /groups")
@@ -1112,7 +1112,7 @@ def _recon006(events):
 def _recon007(events):
     """Sysmon EID 1 — ping sweep or nmap/masscan discovery."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "nmap", "masscan", "ping -n 1", "arp-scan",
                           "Invoke-PortScan", "Test-NetConnection")
     ]
@@ -1304,7 +1304,7 @@ def _dcs009(events):
 def _dcs010(events):
     """Sysmon EID 1/11 — NTDS.dit access or VSS shadow copy of AD database."""
     matches = [
-        e for e in _events_by_eid(events, "1", "11")
+        e for e in _events_by_eid(events, "1", "4688", "11")
         if _desc_contains(e, "ntds.dit", "ntds\\ntds.dit", "NTDS.DIT")
         or (_desc_contains(e, "vssadmin", "wmic shadowcopy", "diskshadow")
             and _desc_contains(e, "ntds", "active directory", "NTDS"))
@@ -1473,7 +1473,7 @@ def _priv010(events):
 def _priv011(events):
     """Sysmon EID 1 — PrintSpooler/Potato exploit for SeImpersonatePrivilege abuse."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "PrintSpooler", "spoolsv", "JuicyPotato", "RoguePotato",
                            "SweetPotato", "GodPotato", "PrintNotify", "EfsPotato",
                            "SeImpersonatePrivilege", "ImpersonatePrivilege",
@@ -1527,7 +1527,7 @@ def _pers009(events):
 def _pers010(events):
     """Sysmon EID 1 — shadow copy deletion (ransomware / anti-forensics)."""
     matches = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "vssadmin", "wmic shadowcopy", "wbadmin", "diskshadow", "bcdedit")
         and _desc_contains(e, "delete", "resize", "shadowstorage", "recoveryenabled no",
                             "ignorefailures", "bootstatuspolicy")
@@ -1659,7 +1659,7 @@ def _tool001(events):
 def _tool002(events):
     """Mimikatz tool behavioral fingerprint — process name or LSASS+SeTcbPrivilege combo."""
     direct = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "mimikatz", "mimilib", "sekurlsa", "lsadump", "kerberos::ptt")
     ]
     seen: set[str] = set()
@@ -1707,7 +1707,7 @@ def _tool002(events):
 def _tool003(events):
     """Impacket / CrackMapExec behavioral fingerprint — process names or NTLM+SMB burst."""
     direct = [
-        e for e in _events_by_eid(events, "1")
+        e for e in _events_by_eid(events, "1", "4688")
         if _desc_contains(e, "impacket", "secretsdump", "smbexec.py", "wmiexec.py",
                            "psexec.py", "getuserspns", "getnpusers", "lookupsid",
                            "crackmapexec", "cme.exe")

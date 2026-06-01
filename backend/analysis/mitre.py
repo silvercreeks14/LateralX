@@ -180,11 +180,32 @@ _GUARDS: dict[str, object] = {
     "T1547.001": _guard_t1547001,
 }
 
+
+def _is_rfc1918(ip: str) -> bool:
+    """Return True for private/loopback IPv4 — used to restrict C2 exfil detection to external IPs."""
+    try:
+        parts = [int(x) for x in ip.strip().split(".")]
+        if len(parts) != 4:
+            return False
+        return (
+            parts[0] == 10
+            or (parts[0] == 172 and 16 <= parts[1] <= 31)
+            or (parts[0] == 192 and parts[1] == 168)
+            or parts[0] == 127
+        )
+    except (ValueError, AttributeError):
+        return False
+
+
 # (trigger_keywords, technique) — first match per technique ID wins
 _MAP: list[tuple[list[str], MitreTechnique]] = [
     # Ingress tool transfer — expanded to cover Cobalt Strike, Sliver, and Havoc download paths.
     # start-bitstransfer: Cobalt Strike BITS staging; invoke-webrequest / wget.exe / curl.exe:
     # used by virtually every C2 framework as an alternative to certutil.
+    # Spearphishing Attachment — Office application spawning a child process
+    (["winword.exe", "excel.exe", "powerpnt.exe", "outlook.exe", "msaccess.exe"],
+     MitreTechnique(id="T1566.001", name="Spearphishing Attachment", tactic="Initial Access")),
+
     (["certutil", "urlcache", "bitsadmin /transfer",
       "start-bitstransfer", "invoke-webrequest -uri", "wget.exe", "curl.exe -o",
       "downloadfile(", "downloaddata("],
@@ -202,6 +223,10 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
     (["wmic", "win32_process create", "invoke-wmimethod", "register-wmievent",
       "commandlinetemplate", "activescriptconsumer"],
      MitreTechnique(id="T1047", name="Windows Management Instrumentation", tactic="Execution")),
+
+    # VBScript execution — wscript.exe/cscript.exe launching .vbs payloads
+    (["wscript.exe", "cscript.exe", ".vbs", "vbscript", "wscript /b", "cscript /b"],
+     MitreTechnique(id="T1059.005", name="Visual Basic", tactic="Execution")),
 
     (["-encodedcommand", "-enc ", "powershell.exe -enc"],
      MitreTechnique(id="T1059.001", name="PowerShell (Encoded)", tactic="Execution")),
@@ -253,6 +278,10 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
     # Large outbound transfer flagged by network correlator (bytes_out in description)
     (["t1048 exfil", "large outbound transfer", "bytes_out", "data exfiltrated"],
      MitreTechnique(id="T1048", name="Exfiltration Over Alternative Protocol", tactic="Exfiltration")),
+
+    # Exfiltration Over C2 Channel: agent sends staged data back over its existing beacon
+    (["t1041", "exfil_c2", "c2 exfiltration"],
+     MitreTechnique(id="T1041", name="Exfiltration Over C2 Channel", tactic="Exfiltration")),
 
     # DDoS: network-level denial of service
     # "filtering platform has blocked a packet/connection" removed — single WFP block
@@ -314,6 +343,18 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
       "rubeus.exe", "rubeus asktgt", "/ptt"],  # Rubeus process + PTT injection flag
      MitreTechnique(id="T1550.003", name="Pass the Ticket", tactic="Lateral Movement")),
 
+    # Event log clearing — wevtutil or EID 1102 audit log cleared
+    (["wevtutil cl", "wevtutil.exe cl", "clear-eventlog", "clearevents",
+      "the audit log was cleared", "1102"],
+     MitreTechnique(id="T1070.001", name="Clear Windows Event Logs",
+                    tactic="Defense Evasion")),
+
+    # Access Token Manipulation — SeImpersonatePrivilege abuse by non-service accounts
+    (["seimpersonateprivilege", "token impersonation", "impersonation token",
+      "setcbprivilege", "privilege::debug", "seassignprimarytokenprivilege"],
+     MitreTechnique(id="T1134", name="Access Token Manipulation",
+                    tactic="Privilege Escalation")),
+
     (["skeleton key", "misc::skeleton", "patching lsass"],
      MitreTechnique(id="T1207", name="Rogue Domain Controller (Skeleton Key)",
                     tactic="Defense Evasion")),
@@ -361,8 +402,8 @@ _MAP: list[tuple[list[str], MitreTechnique]] = [
     # "lsass.exe" removed — too broad (fires on EID 5156/3/12/13).
     # Lsass-as-target detection handled by the compound rule in _COMPOUND_MAP.
     # "ntds.dit" moved to T1003.003 (NTDS) — the correct sub-technique.
-    (["mimikatz", "procdump", "comsvcs.dll", "secretsdump", "invoke-mimikatz",
-      "wce.exe", "pwdump", "fgdump"],
+    (["mimikatz", "mimi.dll", "sekurlsa", "procdump", "comsvcs.dll",
+      "secretsdump", "invoke-mimikatz", "wce.exe", "pwdump", "fgdump"],
      MitreTechnique(id="T1003.001", name="LSASS Memory Dumping", tactic="Credential Access")),
 
     (["net localgroup administrators", "net user /add"],
@@ -493,6 +534,45 @@ def map_techniques(events: list[ForensicEvent]) -> list[MitreTechnique]:
                     evidence=event.description[:120],
                 ))
                 seen_ids.add(technique.id)
+
+    # Extra pass: network events store large outbound transfers in event.extra["bytes_out"]
+    # rather than in description text, so keyword matching misses them.
+    # Detect T1048 (large outbound) and T1041 (C2-port exfil to external IP) here.
+    _EXFIL_THRESHOLD = 10_000_000   # 10 MB
+    _C2_PORTS = frozenset({80, 443, 8080, 8443, 4444, 4443})
+    for event in events:
+        raw_bytes = (event.extra or {}).get("bytes_out", 0)
+        try:
+            bytes_out = int(raw_bytes)
+        except (TypeError, ValueError):
+            bytes_out = 0
+        if bytes_out < _EXFIL_THRESHOLD:
+            continue
+        action = str((event.extra or {}).get("action", "")).lower()
+        if action in ("deny", "block", "drop"):
+            continue
+        dst_ip = str((event.extra or {}).get("dst_ip", ""))
+        raw_port = (event.extra or {}).get("dst_port") or 0
+        try:
+            dst_port = int(raw_port)
+        except (TypeError, ValueError):
+            dst_port = 0
+        if "T1048" not in seen_ids:
+            results.append(MitreTechnique(
+                id="T1048",
+                name="Exfiltration Over Alternative Protocol",
+                tactic="Exfiltration",
+                evidence=f"Large outbound transfer: {bytes_out:,} bytes → {dst_ip}",
+            ))
+            seen_ids.add("T1048")
+        if dst_port in _C2_PORTS and dst_ip and not _is_rfc1918(dst_ip) and "T1041" not in seen_ids:
+            results.append(MitreTechnique(
+                id="T1041",
+                name="Exfiltration Over C2 Channel",
+                tactic="Exfiltration",
+                evidence=f"Large outbound HTTPS ({bytes_out:,} bytes) to external {dst_ip}:{dst_port}",
+            ))
+            seen_ids.add("T1041")
 
     results.sort(
         key=lambda t: _TACTIC_ORDER.index(t.tactic) if t.tactic in _TACTIC_ORDER else 99

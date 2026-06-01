@@ -39,7 +39,7 @@ def _rubeus(events: list[ForensicEvent]) -> list[dict]:
     hits = []
     seen: set[str] = set()
 
-    for e in _eid(events, "1"):
+    for e in _eid(events, "1", "4688"):
         if not _has(e, "rubeus", "rubeus.exe"):
             continue
         entity = e.user or e.source_host or "unknown"
@@ -51,7 +51,7 @@ def _rubeus(events: list[ForensicEvent]) -> list[dict]:
             "confidence": "high",
             "entity":     entity,
             "timestamp":  e.timestamp.isoformat(),
-            "indicators": [f"Rubeus process image in command line (Sysmon EID 1, {e.timestamp.strftime('%H:%M:%S')})"],
+            "indicators": [f"Rubeus process image in command line (EID {e.event_id}, {e.timestamp.strftime('%H:%M:%S')})"],
             "mitre_ids":  ["T1558.003", "T1558.004", "T1550.003"],
         })
 
@@ -82,8 +82,8 @@ def _mimikatz(events: list[ForensicEvent]) -> list[dict]:
     hits = []
     seen: set[str] = set()
 
-    for e in _eid(events, "1"):
-        if not _has(e, "mimikatz", "mimilib", "sekurlsa", "lsadump", "kerberos::ptt"):
+    for e in _eid(events, "1", "4688"):
+        if not _has(e, "mimikatz", "mimi.dll", "mimilib", "sekurlsa", "lsadump", "kerberos::ptt"):
             continue
         entity = e.user or e.source_host or "unknown"
         if entity in seen:
@@ -94,7 +94,7 @@ def _mimikatz(events: list[ForensicEvent]) -> list[dict]:
             "confidence": "high",
             "entity":     entity,
             "timestamp":  e.timestamp.isoformat(),
-            "indicators": ["Mimikatz module name / command in process arguments (Sysmon EID 1)"],
+            "indicators": [f"Mimikatz signature in process creation event (EID {e.event_id})"],
             "mitre_ids":  ["T1003.001", "T1550.002", "T1558.001"],
         })
 
@@ -125,7 +125,7 @@ def _bloodhound(events: list[ForensicEvent]) -> list[dict]:
     hits = []
     seen: set[str] = set()
 
-    for e in _eid(events, "1"):
+    for e in _eid(events, "1", "4688"):
         if not _has(e, "bloodhound", "sharphound", "invoke-bloodhound", "sharphound.exe"):
             continue
         entity = e.user or e.source_host or "unknown"
@@ -137,7 +137,7 @@ def _bloodhound(events: list[ForensicEvent]) -> list[dict]:
             "confidence": "high",
             "entity":     entity,
             "timestamp":  e.timestamp.isoformat(),
-            "indicators": ["SharpHound collector binary in process arguments (Sysmon EID 1)"],
+            "indicators": [f"SharpHound collector binary in process arguments (EID {e.event_id})"],
             "mitre_ids":  ["T1482", "T1069.002", "T1087.002"],
         })
 
@@ -166,7 +166,7 @@ def _impacket(events: list[ForensicEvent]) -> list[dict]:
     hits = []
     seen: set[str] = set()
 
-    for e in _eid(events, "1"):
+    for e in _eid(events, "1", "4688"):
         if not _has(e, "impacket", "secretsdump", "smbexec.py", "wmiexec.py",
                     "psexec.py", "getuserspns", "getnpusers", "lookupsid"):
             continue
@@ -179,7 +179,7 @@ def _impacket(events: list[ForensicEvent]) -> list[dict]:
             "confidence": "high",
             "entity":     entity,
             "timestamp":  e.timestamp.isoformat(),
-            "indicators": ["Impacket script name in process command line (Sysmon EID 1)"],
+            "indicators": [f"Impacket script name in process command line (EID {e.event_id})"],
             "mitre_ids":  ["T1003.006", "T1557.001", "T1021.002"],
         })
 
@@ -208,7 +208,7 @@ def _crackmapexec(events: list[ForensicEvent]) -> list[dict]:
     hits = []
     seen: set[str] = set()
 
-    for e in _eid(events, "1"):
+    for e in _eid(events, "1", "4688"):
         if not _has(e, "crackmapexec", "cme.exe"):
             continue
         entity = e.user or e.source_host or "unknown"
@@ -220,7 +220,7 @@ def _crackmapexec(events: list[ForensicEvent]) -> list[dict]:
             "confidence": "high",
             "entity":     entity,
             "timestamp":  e.timestamp.isoformat(),
-            "indicators": ["CrackMapExec binary detected (Sysmon EID 1)"],
+            "indicators": [f"CrackMapExec binary detected (EID {e.event_id})"],
             "mitre_ids":  ["T1110.003", "T1021.002"],
         })
 
