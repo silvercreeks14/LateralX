@@ -140,6 +140,17 @@ def _step_description(stage: str, source: str, target: str) -> str:
 
 _IP_RE = _re.compile(r'^\d{1,3}(?:\.\d{1,3}){3}$')
 
+# Well-known benign public IPs — never treated as suspicious external nodes
+_BENIGN_PUBLIC_IPS = frozenset({
+    "8.8.8.8", "8.8.4.4",                      # Google Public DNS
+    "1.1.1.1", "1.0.0.1",                       # Cloudflare DNS
+    "9.9.9.9", "149.112.112.112",               # Quad9 DNS
+    "208.67.222.222", "208.67.220.220",         # OpenDNS
+    "4.2.2.1", "4.2.2.2",                       # Level3 DNS
+    "13.107.4.52", "13.107.6.52",               # Microsoft 365
+    "20.112.52.29", "20.189.173.0",             # Microsoft Azure
+})
+
 # RFC 1918 / loopback / link-local ranges — treated as internal, not external IPs
 _RFC1918 = _re.compile(
     r'^(?:'
@@ -153,8 +164,8 @@ _RFC1918 = _re.compile(
 
 
 def _is_external_ip(s: str) -> bool:
-    """True when s is a valid IPv4 address AND outside RFC 1918 / loopback ranges."""
-    return _is_ip_address(s) and not bool(_RFC1918.match(s))
+    """True when s is a valid IPv4 address, outside RFC 1918/loopback, and not a known benign public IP."""
+    return _is_ip_address(s) and not bool(_RFC1918.match(s)) and s not in _BENIGN_PUBLIC_IPS
 
 
 # Accounts that touch many hosts by design — exclude from lateral movement detection

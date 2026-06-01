@@ -17,6 +17,17 @@ _PRIVATE = (
     "127.", "0.", "255.",
 )
 
+# Well-known benign public IPs — DNS resolvers, NTP servers, Microsoft infra
+_BENIGN_IPS = {
+    "8.8.8.8", "8.8.4.4",           # Google Public DNS
+    "1.1.1.1", "1.0.0.1",           # Cloudflare DNS
+    "9.9.9.9", "149.112.112.112",   # Quad9 DNS
+    "208.67.222.222", "208.67.220.220",  # OpenDNS
+    "4.2.2.1", "4.2.2.2",           # Level3 DNS
+    "13.107.4.52", "13.107.6.52",   # Microsoft 365
+    "20.112.52.29", "20.189.173.0", # Microsoft Azure
+}
+
 _BENIGN_DOMAINS = {
     # Microsoft infrastructure
     "microsoft.com", "windows.com", "windowsupdate.com", "office.com",
@@ -59,7 +70,9 @@ def extract_iocs(events: list[ForensicEvent]) -> list[IOC]:
         ctx = text[:150]
 
         for ip in _RE["ip"].findall(text):
-            if ip not in seen and not any(ip.startswith(p) for p in _PRIVATE):
+            if (ip not in seen
+                    and not any(ip.startswith(p) for p in _PRIVATE)
+                    and ip not in _BENIGN_IPS):
                 seen.add(ip)
                 iocs.append(IOC(type="ip", value=ip, context=ctx))
 

@@ -50,3 +50,8 @@ T1078 (Valid Accounts — service account lateral)
 **Behavioral rules expected:** `auth_failure_burst`, `rdp_lateral_movement`, `certutil_download`
 
 **Severity:** HIGH — credential theft leading to domain lateral movement in a healthcare environment.
+
+## Real Datasets Added (fetch_real_datasets.py)
+`otrf_empire_mimikatz_logonpasswords_real.jsonl` - OTRF Mimikatz real capture.
+`otrf_ntds_shadow_copy_real.jsonl` - OTRF NTDS shadow copy dump real capture.
+Source: OTRF/Security-Datasets atomic/windows (MIT License).

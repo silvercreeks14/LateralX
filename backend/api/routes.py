@@ -1462,7 +1462,9 @@ def get_report_html(
     )
 
     # Choose report generator
-    is_quick = (type == "quick") or (type == "auto" and result.windows_analyzed == 0)
+    # windows_analyzed == 0 means no LLM was used (Ollama off) — but the deep
+    # report should still be generated so detection rules and full analysis are included.
+    is_quick = (type == "quick")
     if type == "court":
         # Gather chain-of-custody data for the court report
         audit_rows = db.query(AuditLogModel).order_by(AuditLogModel.id).all()

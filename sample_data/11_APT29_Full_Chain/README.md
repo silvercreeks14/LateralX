@@ -42,3 +42,8 @@ LAT-001, LAT-002, LAT-003, LAT-005, LAT-006, LAT-007,
 PRIV-001, PRIV-003, PRIV-008,
 PERS-002, PERS-003, PERS-004, PERS-005,
 TOOL-001, TOOL-002, TOOL-003
+
+## Real Dataset Added (fetch_real_datasets.py)
+`otrf_apt29_day1_real.jsonl` - OTRF APT29 Evaluation Day 1 real lab capture.
+Source: OTRF/Security-Datasets compound/apt29/day1 (MIT License).
+Ground truth: MITRE ATT&CK APT29 evaluation procedure document.

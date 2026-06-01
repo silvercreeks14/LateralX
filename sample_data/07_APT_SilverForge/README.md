@@ -52,3 +52,8 @@ Created) → T1098 (Account Manipulation) → T1070.001 (Event Log Clearing)
 **Note:** Use this scenario to test multi-source correlation. Events across the four files
 must be joined by hostname and timestamp to reconstruct the full kill chain. Baseline
 morning traffic in `firewall_netflow.csv` is intentional — it exercises FP suppression.
+
+## Real Datasets Added (fetch_real_datasets.py)
+`otrf_empire_dcsync_real.jsonl` - OTRF Empire DCSync real capture.
+`otrf_empire_wmi_lateral_real.jsonl` - OTRF Empire WMI lateral real capture.
+Source: OTRF/Security-Datasets atomic/windows (MIT License).

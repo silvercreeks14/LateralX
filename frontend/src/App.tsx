@@ -67,8 +67,8 @@ function PhaseGroup({
     >
       <div className="px-2 pt-2.5 pb-1 flex items-center gap-2">
         <span
-          className="w-[18px] h-[18px] rounded text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-colors"
-          style={{ background: color + '20', color: active ? color : '' }}
+          className="w-[18px] h-[18px] rounded text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-colors text-slate-500 dark:text-slate-400"
+          style={{ background: color + '20', ...(active ? { color } : {}) }}
         >
           {number}
         </span>

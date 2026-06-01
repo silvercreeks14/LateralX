@@ -106,8 +106,8 @@ def _scenario_credential_theft() -> list[ForensicEvent]:
         # Account creation for persistence
         _ev("net user /add backdoor P@ssw0rd123 — local account created",
             host="WORKSTATION-01", event_id="4688", offset_min=2),
-        # Lateral movement via PsExec
-        _ev("psexec.exe \\\\CORP-DC01 -u jdoe -p (hash) cmd.exe — remote execution",
+        # Lateral movement via PsExec — cmd.exe /c is the realistic PsExec syntax
+        _ev("psexec.exe \\\\CORP-DC01 -u jdoe -p (hash) cmd.exe /c whoami — remote execution",
             host="WORKSTATION-01", event_id="4688", offset_min=5),
         # Logon events across 3 hosts within 30 min — triggers lateral movement detection
         _ev("Logon event: jdoe authenticated successfully",
@@ -118,7 +118,7 @@ def _scenario_credential_theft() -> list[ForensicEvent]:
             host="FILE-SERVER-02", event_id="4624", offset_min=20),
     ]
 
-# T1059.003 fires because "cmd.exe" appears in the psexec event description
+# T1059.003 fires because "cmd.exe /c" appears in the psexec event description
 # T1082 removed — no systeminfo/whoami /all events in this scenario; T1003.001 via mimikatz keyword
 _GT_CREDENTIAL_THEFT = {"T1003.001", "T1021.002", "T1136.001", "T1059.003"}
 

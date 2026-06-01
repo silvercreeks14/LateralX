@@ -42,7 +42,7 @@ function threatLabel(techniques: string[], flags: string[]): string {
   return 'Suspicious Activity'
 }
 
-// â”€â”€ SVG icon data URIs â€” white stroke on solid node background â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// â”€â”€ SVG icon data URIs — white stroke on solid node background â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const enc = (s: string) => 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s)
 const SL  = 'stroke-linecap="round" stroke-linejoin="round"'
 
@@ -179,7 +179,7 @@ const CY_STYLE: cytoscape.StylesheetJsonBlock[] = [
       color:              '#475569',
     },
   },
-  // Pivot â€” largest node, darkest blue
+  // Pivot — largest node, darkest blue
   {
     selector: 'node[?isPivot][nodeType = "host"]',
     style: {
@@ -254,7 +254,7 @@ const CY_STYLE: cytoscape.StylesheetJsonBlock[] = [
 // â”€â”€ Node label â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 function nodeLabel(name: string, entityType: string): string {
   if (isIoc(name) || isExternalIp(name)) return name
-  if (isInternalIp(name)) return `âŒ‚ ${name}`
+  if (isInternalIp(name)) return name
   if (entityType === 'host') return name
   return name
 }
@@ -343,7 +343,7 @@ function buildElements(result: ADEntityIntelResult): {
   let directEdgeCount = 0
 
   const addEdge = (src: string, tgt: string, edgeType: string, edgeStyle: string) => {
-    const key = `${src}â†’${tgt}`
+    const key = `${src}->${tgt}`
     if (edgeSeen.has(key)) return
     edgeSeen.add(key)
     elements.push({ data: { id: key, source: src, target: tgt, edgeType, edgeStyle } })
@@ -381,7 +381,7 @@ function buildElements(result: ADEntityIntelResult): {
     }
     for (const [, names] of techMap) {
       for (let i = 0; i < names.length - 1; i++) {
-        const key = `${names[i]}â†’${names[i + 1]}`
+        const key = `${names[i]}->${names[i + 1]}`
         if (!edgeSeen.has(key)) {
           edgeSeen.add(key)
           elements.push({
@@ -472,7 +472,7 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
 
     const layout = cy.layout(layoutOptions)
     layout.on('layoutstop', () => {
-      // Cap auto-fit zoom â€” cose can zoom too tight on sparse graphs
+      // Cap auto-fit zoom — cose can zoom too tight on sparse graphs
       if (cy.zoom() > 1.4) {
         cy.zoom(1.4)
         cy.center()
@@ -536,8 +536,8 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
               )}
             </div>
             <p className="text-slate-600 dark:text-slate-400 text-sm mt-2 leading-relaxed">
-              Force-directed threat intelligence graph â€” host/user topology with synthesized attack nodes
-              and IOC correlation. Nodes with risk&nbsp;â‰¥&nbsp;70 route through orange threat nodes.
+              Force-directed threat intelligence graph — host/user topology with synthesized attack nodes
+              and IOC correlation. Nodes with risk&nbsp;&ge;&nbsp;70 route through orange threat nodes.
             </p>
           </div>
           <button
@@ -552,7 +552,7 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                Loadingâ€¦
+                Loading…
               </>
             ) : 'Build Threat Map'}
           </button>
@@ -571,7 +571,7 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
                 className="px-3 py-1.5 rounded-full text-xs font-semibold truncate max-w-[220px] border"
                 style={selectedUploadId === u.id ? { background: '#00F0FF', color: '#0f172a', borderColor: '#00F0FF' } : { background: 'transparent', color: '#64748b', borderColor: '#cbd5e1' }}
                 title={u.filename}
-              >{u.filename.length > 22 ? u.filename.slice(0, 19) + 'â€¦' : u.filename}</button>
+              >{u.filename.length > 22 ? u.filename.slice(0, 19) + '…' : u.filename}</button>
             ))}
           </div>
         )}
@@ -606,7 +606,7 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
               <p className="text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
                 {edgeInfo.inferred > 0
                   ? `No direct lateral movement detected. Showing ${edgeInfo.inferred} inferred correlation edge${edgeInfo.inferred !== 1 ? 's' : ''} between entities sharing MITRE techniques (dashed). Upload Sysmon or Windows Security event logs for direct host-to-host paths.`
-                  : 'No lateral movement links found in this log sample. Entities appear isolated â€” this typically means events are from a single host, or no cross-host logon/network events were parsed. Try uploading Sysmon network or Windows Security logon logs.'
+                  : 'No lateral movement links found in this log sample. Entities appear isolated — this typically means events are from a single host, or no cross-host logon/network events were parsed. Try uploading Sysmon network or Windows Security logon logs.'
                 }
               </p>
             </div>
@@ -621,17 +621,17 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
               <LegendRow color="#3b82f6" border="#1d4ed8" label="Host / Hostname" />
               <LegendRow color="#6366f1" border="#4338ca" label="User Account" />
               <LegendRow color="#1d4ed8" border="#1e3a8a" label="Pivot (most connected)" />
-              <LegendRow color="#f97316" border="#c2410c" label="Threat / Attack (risk â‰¥ 70)" />
+              <LegendRow color="#f97316" border="#c2410c" label="Threat / Attack (risk ≥ 70)" />
               <LegendRow color="#ef4444" border="#991b1b" label="IOC / Blacklisted IP" />
               <LegendRow color="#64748b" border="#475569" label="External IP" />
               <div className="border-t border-slate-200 mt-1 pt-1.5 space-y-1">
                 <div className="flex items-center gap-2 text-slate-500">
                   <div className="w-6 h-px bg-slate-400" />
-                  <span>Solid â€” confirmed (risk â‰¥ 85)</span>
+                  <span>Solid — confirmed (risk ≥ 85)</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-500">
                   <div className="w-6 h-px border-t border-dashed border-slate-400" />
-                  <span>Dashed â€” inferred / lower risk</span>
+                  <span>Dashed — inferred / lower risk</span>
                 </div>
               </div>
             </div>
@@ -684,7 +684,7 @@ export default function ADThreatMap({ activeCaseId, uploads }: Props) {
                     {hover.entity && (
                       <>
                         <p className={`font-semibold capitalize text-xs mb-0.5 ${riskColor(hover.entity.risk_score)}`}>
-                          {hover.entity.risk_label} â€” {hover.entity.risk_score}/100
+                          {hover.entity.risk_label} — {hover.entity.risk_score}/100
                         </p>
                         <p className="text-slate-500">{hover.entity.event_count} events Â· {hover.entity.entity_type}</p>
                         {hover.entity.anomaly_flags.length > 0 && (

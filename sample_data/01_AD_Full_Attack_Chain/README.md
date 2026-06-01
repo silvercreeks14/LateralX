@@ -56,3 +56,8 @@ forges a Golden Ticket, and reaches DC-01 via WMI. Achieves Domain Admin persist
 5. **MITRE ATT&CK** coverage: T1566 (Phishing) → T1218.005 (mshta) → T1069.002 (BloodHound) →
    T1558.003 (Kerberoasting) → T1021.002 (PsExec) → T1003.001 (LSASS) → T1003.006 (DCSync) →
    T1558.001 (Golden Ticket) → T1136.001 (Account Creation) → T1078 (Valid Accounts)
+
+## Real Datasets Added (fetch_real_datasets.py)
+`otrf_empire_psexec_real.jsonl` - OTRF Empire PsExec lateral real capture.
+`otrf_empire_mimikatz_sam_real.jsonl` - OTRF Mimikatz SAM access real capture.
+Source: OTRF/Security-Datasets atomic/windows (MIT License).

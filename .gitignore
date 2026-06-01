@@ -28,3 +28,14 @@ node_modules/
 *.pdf
 *.pptx
 LateralX_Poster.png
+
+# Real OTRF dataset files — downloaded by fetch_real_datasets.py, not stored in repo
+sample_data/**/*_real.jsonl
+
+# Development-only scripts — not needed for end users
+benchmark_real.py
+diag_fp.py
+fetch_real_datasets.py
+
+# ML model files — distributed separately, not in source control
+*.pkl

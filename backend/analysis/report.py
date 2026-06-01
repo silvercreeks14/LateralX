@@ -1080,15 +1080,26 @@ def _exec_summary_html(result: RCAResult, events: list[ForensicEvent],
 
 
 def _detection_rules_html(result: RCAResult, events: list[ForensicEvent]) -> str:
-    # IOC/MITRE-derived rules
-    ioc_sigma   = rules_mod.generate_sigma_rules(result.iocs, result.mitre_techniques)
+    # Regenerate techniques and IOCs fresh from events when available so that
+    # the evidence keywords are accurate and rules are never silently empty
+    # due to serialisation loss from the database round-trip.
+    if events:
+        from backend.analysis.mitre import map_techniques as _map_t
+        from backend.analysis.ioc import extract_iocs as _extract_i
+        _techniques = _map_t(events)
+        _iocs = _extract_i(events)
+    else:
+        _techniques = result.mitre_techniques
+        _iocs = result.iocs
+
+    ioc_sigma   = rules_mod.generate_sigma_rules(_iocs, _techniques)
     # Behavioral rules gate on the actual event timeline — always included
     behav_sigma = rules_mod.generate_behavioral_sigma_rules(events)
     sigma_rules = ioc_sigma + behav_sigma
 
-    snort_rules = rules_mod.generate_snort_rules(result.iocs)
-    yara_rules  = rules_mod.generate_yara_rules(result.iocs, result.mitre_techniques)
-    fw_rules    = rules_mod.generate_firewall_rules(result.iocs)
+    snort_rules = rules_mod.generate_snort_rules(_iocs)
+    yara_rules  = rules_mod.generate_yara_rules(_iocs, _techniques)
+    fw_rules    = rules_mod.generate_firewall_rules(_iocs)
 
     if not sigma_rules and not snort_rules and not yara_rules and not fw_rules:
         return ""

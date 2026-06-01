@@ -761,6 +761,15 @@ _SCENARIO_LABEL_MAP: dict[str, str] = {
     "scenario_privilege_escalation_windows":  "privilege_escalation",
     "scenario_persistence_wmi":               "persistence",
     "scenario_windows_attack":                "lateral_movement",
+
+    # Real OTRF captures (downloaded by fetch_real_datasets.py)
+    "otrf_empire_dcsync_real":              "credential_theft",
+    "otrf_empire_wmi_lateral_real":         "lateral_movement",
+    "otrf_empire_mimikatz_logonpasswords_real": "credential_theft",
+    "otrf_ntds_shadow_copy_real":           "credential_theft",
+    "otrf_empire_psexec_real":              "lateral_movement",
+    "otrf_empire_mimikatz_sam_real":        "credential_theft",
+    # APT29 Day 1 is kept test-only (not in training) to preserve train/test separation
     # ── AD Full Attack Chain (sample_data/01_AD_Full_Attack_Chain/) ─────────
     # Not used as a test scenario — safe to use for training
     "ad_attack_scenario":                     "lateral_movement",
